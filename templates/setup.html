@@ -1,169 +1,206 @@
 {% extends "base.html" %}
-{% set nav = 'new' %}
+{% from "ui.html" import icon %}
 {% block title %}New interview — {{ app_name }}{% endblock %}
 {% block main %}
 <div class="wrap page">
   <div class="page-head">
     <h1>Set up your interview</h1>
-    <p class="lede">Say what you're going for. Add your CV and the questions will be about your own work.</p>
-    {% if not user %}<p class="note small">You're trying this without an account. Sign in afterwards and the report is kept.</p>{% endif %}
+    <p class="lede">Five short steps. You'll see every question before anything starts.</p>
+    {% if not user %}<p class="note small" style="max-width:44rem">You're trying this without an account. <a href="/login?next=/app/new">Sign in</a> to keep your reports.</p>{% endif %}
+    <p class="note small" id="journey-banner" hidden style="max-width:44rem"></p>
   </div>
 
-  <div class="setup">
+  <div class="wizard">
+    <ol class="stepper" id="stepper" aria-label="Steps">
+      <li><button type="button" data-goto="1"><i>1</i><span>Your CV</span></button></li>
+      <li><button type="button" data-goto="2"><i>2</i><span>The job</span></button></li>
+      <li><button type="button" data-goto="3"><i>3</i><span>What to practise</span></button></li>
+      <li><button type="button" data-goto="4"><i>4</i><span>How you'll talk</span></button></li>
+      <li><button type="button" data-goto="5"><i>5</i><span>Your questions</span></button></li>
+    </ol>
+
     <form id="setup-form" novalidate>
-      <section class="step">
-        <div class="step-title"><b>1</b><h2>Type of interview</h2></div>
-        <div class="packs">
+      <section class="wiz-step" data-step="1">
+        <h2>Start with your CV</h2>
+        <p class="muted">We use it to suggest roles and to ask about your real work. It's read in this browser and sent only to your AI.</p>
+        <div class="panel panel-tight" id="ai-box" style="margin-bottom:1.1rem"></div>
+        <div class="drop" id="cv-drop">
+          {{ icon('upload', 'icon ic') }}
+          <p style="margin:0 auto .2rem"><b>Drop your CV here</b></p>
+          <p class="small faint" style="margin:0 auto 1rem">PDF, Word or plain text, up to 8 MB</p>
+          <div class="row" style="justify-content:center">
+            <label class="btn btn-primary" for="cv-file" style="margin:0">Choose a file</label>
+            <input type="file" id="cv-file" accept=".pdf,.docx,.txt,.md" class="sr-only">
+            <button type="button" class="btn" id="cv-paste">Paste the text instead</button>
+          </div>
+          <p class="small" id="cv-status" role="status" style="margin:1rem auto 0"></p>
+        </div>
+        <textarea id="cv-text" hidden placeholder="Paste your CV here" style="margin-top:.8rem"></textarea>
+        <div class="spread" style="margin-top:.8rem">
+          <label class="check small" style="margin:0"><input type="checkbox" id="cv-remember"><span>Keep my CV on this device for next time</span></label>
+          <button type="button" class="btn btn-quiet btn-small" id="cv-clear" hidden>Remove CV</button>
+        </div>
+        <div class="found" id="found" hidden></div>
+        <div class="wiz-nav"><span></span><div class="row"><button type="button" class="btn btn-quiet" data-next id="skip-cv">Continue without a CV</button><button type="button" class="btn btn-primary" data-next>Continue</button></div></div>
+      </section>
+
+      <section class="wiz-step" data-step="2" hidden>
+        <h2>The job you're going for</h2>
+        <p class="muted">An internship and a senior role get very different questions, so pick the level too.</p>
+        <div class="field">
+          <label for="role">Job title</label>
+          <input id="role" name="role" type="text" required maxlength="120" list="role-list" placeholder="For example: Frontend Developer" autocomplete="organization-title">
+          <datalist id="role-list">
+            {% for r in ['Software Engineer', 'Frontend Developer', 'Backend Developer', 'Data Analyst', 'Data Scientist', 'Product Manager', 'UI/UX Designer', 'Digital Marketing Executive', 'Business Analyst', 'Accountant', 'Customer Support Executive', 'Sales Executive', 'HR Executive', 'Project Manager', 'Teacher'] %}<option value="{{ r }}">{% endfor %}
+          </datalist>
+          <div class="chips" id="role-chips" style="margin-top:.6rem"></div>
+        </div>
+        <div class="field">
+          <label>Level</label>
+          <div class="choices">
+            <label><input type="radio" name="level" value="intern"><span>Internship</span></label>
+            <label><input type="radio" name="level" value="fresher"><span>Fresh graduate</span></label>
+            <label><input type="radio" name="level" value="junior" checked><span>Junior</span></label>
+            <label><input type="radio" name="level" value="mid"><span>Mid-level</span></label>
+            <label><input type="radio" name="level" value="senior"><span>Senior</span></label>
+            <label><input type="radio" name="level" value="lead"><span>Lead or manager</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="company">Company <span class="faint">(optional)</span></label>
+          <input id="company" name="company" type="text" maxlength="120">
+        </div>
+        <div class="field">
+          <label for="jd">Job description <span class="faint" id="jd-optional">(optional)</span></label>
+          <textarea id="jd" name="jd" maxlength="12000" placeholder="Paste the job post. Questions will test what it asks for."></textarea>
+          <div class="row" style="margin-top:.6rem"><button type="button" class="btn btn-small" id="match-btn">Check my CV against this job</button><span class="small" id="match-status" role="status"></span></div>
+          <div id="match" class="panel" hidden style="margin-top:1rem"></div>
+        </div>
+        <div class="wiz-nav"><button type="button" class="btn btn-quiet" data-back>Back</button><button type="button" class="btn btn-primary" data-next>Continue</button></div>
+      </section>
+
+      <section class="wiz-step" data-step="3" hidden>
+        <h2>What do you want to practise?</h2>
+        <p class="muted">One interview on its own, or every step of a real hiring process in order.</p>
+        <div class="tabs" role="radiogroup" aria-label="Scope">
+          <label><input type="radio" name="scope" value="single" checked><span>One interview</span></label>
+          <label><input type="radio" name="scope" value="journey"><span>The whole hiring process <span class="tag tag-pro">Pro</span></span></label>
+        </div>
+        <div id="scope-single" class="packs">
           {% for p in packs %}
           <label>
             <input type="radio" name="pack" value="{{ p.slug }}" {% if loop.first %}checked{% endif %}>
-            <span class="opt"><b>{{ p.title }}</b><span>{{ p.summary }}</span></span>
+            <span class="opt"><b>{{ p.title }} <small class="faint" style="font-weight:400">{{ p.minutes }} min</small></b><span>{{ p.summary }}</span></span>
           </label>
           {% endfor %}
         </div>
+        <div id="scope-journey" hidden>
+          <p class="muted">Start from the online application, or skip straight to the interviews. Each step is its own short session with its own report, and the next one is ready when you finish.</p>
+          <ol class="stages">
+            {% for stage in journey %}
+            <li><input type="checkbox" name="stage" value="{{ stage.pack }}" id="stage-{{ loop.index }}" checked><label for="stage-{{ loop.index }}"><b>{{ loop.index }}. {{ stage.title }}</b><span>{{ stage.note }}</span></label></li>
+            {% endfor %}
+          </ol>
+          {% if not has_pass %}<p class="note small" style="margin-top:1rem">The whole hiring process is part of Pro. {% if user %}<a href="/pricing">Get Pro</a>{% else %}<a href="/login?next=/pricing">Sign in</a> to get Pro{% endif %}, or practise each step on its own for free under “One interview”.</p>{% endif %}
+        </div>
+        <div class="wiz-nav"><button type="button" class="btn btn-quiet" data-back>Back</button><button type="button" class="btn btn-primary" data-next>Continue</button></div>
       </section>
 
-      <section class="step">
-        <div class="step-title"><b>2</b><h2>The job</h2></div>
+      <section class="wiz-step" data-step="4" hidden>
+        <h2>How you'll talk</h2>
+        <p class="muted">Choose the format of your real interview if you know it.</p>
         <div class="field">
-          <label for="role">Job title</label>
-          <input id="role" name="role" type="text" required maxlength="120" placeholder="For example: Junior Frontend Developer" autocomplete="organization-title">
-        </div>
-        <div class="grid-2 field">
-          <div>
-            <label for="level">Level</label>
-            <select id="level" name="level">
-              <option value="intern">Intern</option>
-              <option value="fresher">Fresh graduate</option>
-              <option value="junior" selected>Junior</option>
-              <option value="mid">Mid-level</option>
-              <option value="senior">Senior</option>
-              <option value="lead">Lead or manager</option>
-            </select>
+          <label>Format</label>
+          <div class="packs five" id="talk-modes">
+            <label><input type="radio" name="talk" value="video"><span class="opt">{{ icon('video', 'icon ic') }}<b>Video call</b><span>Camera on, speak and listen</span></span></label>
+            <label><input type="radio" name="talk" value="voice" checked><span class="opt">{{ icon('mic', 'icon ic') }}<b>Voice call</b><span>Speak and listen</span></span></label>
+            <label><input type="radio" name="talk" value="listen"><span class="opt">{{ icon('ear', 'icon ic') }}<b>Listen and type</b><span>Hear questions, type answers</span></span></label>
+            <label><input type="radio" name="talk" value="read"><span class="opt">{{ icon('keyboard', 'icon ic') }}<b>Read and speak</b><span>Read questions, answer aloud</span></span></label>
+            <label><input type="radio" name="talk" value="text"><span class="opt">{{ icon('chat', 'icon ic') }}<b>Text chat</b><span>Read and type</span></span></label>
           </div>
-          <div>
-            <label for="company">Company <span class="faint">(optional)</span></label>
-            <input id="company" name="company" type="text" maxlength="120">
-          </div>
-        </div>
-      </section>
-
-      <section class="step">
-        <div class="step-title"><b>3</b><h2>Your CV and the job post</h2></div>
-        <div class="drop" id="cv-drop">
-          <p style="margin:0 0 .6rem"><b>Your CV</b> <span class="muted small">PDF, Word or plain text. Optional, but it makes the questions yours.</span></p>
-          <div class="row">
-            <label class="btn btn-small" for="cv-file" style="margin:0">Choose a file</label>
-            <input type="file" id="cv-file" accept=".pdf,.docx,.txt,.md" class="sr-only">
-            <button type="button" class="btn btn-small btn-quiet" id="cv-paste">Paste text instead</button>
-            <button type="button" class="btn btn-small btn-quiet" id="cv-clear" hidden>Remove CV</button>
-          </div>
-          <p class="small" id="cv-status" role="status" style="margin:.6rem 0 0"></p>
-          <textarea id="cv-text" hidden placeholder="Paste your CV here" style="margin-top:.6rem"></textarea>
-          <label class="check small" style="margin-top:.6rem"><input type="checkbox" id="cv-remember"><span>Keep my CV on this device for next time</span></label>
-        </div>
-        <div class="field" style="margin-top:1.1rem">
-          <label for="jd">Job description <span class="faint" id="jd-optional">(optional)</span></label>
-          <textarea id="jd" name="jd" maxlength="12000" placeholder="Paste the job post"></textarea>
-          <p class="hint">Your CV and the job post are read in this browser and sent only to your AI, never to this site.</p>
-        </div>
-      </section>
-
-      <section class="step">
-        <div class="step-title"><b>4</b><h2>How it runs</h2></div>
-        <div class="field">
-          <label>Interviewer</label>
-          <div class="choices">
-            <label><input type="radio" name="persona" value="friendly"><span>Friendly</span></label>
-            <label><input type="radio" name="persona" value="neutral" checked><span>Neutral</span></label>
-            <label><input type="radio" name="persona" value="skeptical"><span>Tough</span></label>
-          </div>
+          <p class="hint" id="talk-note"></p>
         </div>
         <div class="field">
-          <label>Difficulty</label>
-          <div class="choices">
-            <label><input type="radio" name="difficulty" value="easy"><span>Gentle</span></label>
-            <label><input type="radio" name="difficulty" value="normal" checked><span>Realistic</span></label>
-            <label><input type="radio" name="difficulty" value="hard"><span>Hard, more follow-ups</span></label>
-          </div>
-        </div>
-        <div class="field">
-          <label>Language</label>
-          <div class="choices">
-            <label><input type="radio" name="lang" value="en" checked><span>English</span></label>
-            <label><input type="radio" name="lang" value="bn"><span lang="bn">বাংলা</span></label>
-            <label><input type="radio" name="lang" value="mixed"><span>Bangla and English mixed</span></label>
-          </div>
-        </div>
-        <div class="field">
-          <label>You answer by</label>
-          <div class="choices">
-            <label><input type="radio" name="input" value="voice" checked><span>Speaking</span></label>
-            <label><input type="radio" name="input" value="text"><span>Typing</span></label>
-          </div>
-          <p class="hint" id="voice-note"></p>
-        </div>
-        <div class="field">
-          <label>Feedback</label>
-          <div class="choices">
-            <label><input type="radio" name="mode" value="practice" checked><span>After each question, with redo</span></label>
-            <label><input type="radio" name="mode" value="real"><span>Only at the end, like the real thing</span></label>
-          </div>
-        </div>
-        <div class="field" id="mix-field" hidden>
-          <label>Questions should come from</label>
-          <div class="choices">
-            <label><input type="radio" name="mix" value="both" checked><span>My CV and the role</span></label>
-            <label><input type="radio" name="mix" value="cv"><span>Mostly my CV</span></label>
-            <label><input type="radio" name="mix" value="role"><span>The role only</span></label>
+          <label>Your interviewer</label>
+          <div class="people">
+            <label><input type="radio" name="interviewer" value="ayesha" checked><span class="person"><span class="avatar-host" data-person="ayesha"></span><div><b>Ayesha Rahman</b><br><small>Calm and thorough</small></div></span></label>
+            <label><input type="radio" name="interviewer" value="tanvir"><span class="person"><span class="avatar-host" data-person="tanvir"></span><div><b>Tanvir Ahmed</b><br><small>Direct and to the point</small></div></span></label>
           </div>
         </div>
         <div class="grid-2 field">
           <div>
-            <label for="count">Number of questions</label>
-            <input id="count" name="count" type="number" min="2" max="12" value="5">
+            <label>Manner</label>
+            <div class="choices">
+              <label><input type="radio" name="persona" value="friendly"><span>Friendly</span></label>
+              <label><input type="radio" name="persona" value="neutral" checked><span>Neutral</span></label>
+              <label><input type="radio" name="persona" value="skeptical"><span>Tough</span></label>
+            </div>
+          </div>
+          <div>
+            <label>Difficulty</label>
+            <div class="choices">
+              <label><input type="radio" name="difficulty" value="easy"><span>Gentle</span></label>
+              <label><input type="radio" name="difficulty" value="normal" checked><span>Realistic</span></label>
+              <label><input type="radio" name="difficulty" value="hard"><span>Hard</span></label>
+            </div>
           </div>
         </div>
-        <div class="field">
-          <label for="instructions">Anything the interviewer should know or focus on? <span class="faint">(optional)</span></label>
-          <textarea id="instructions" name="instructions" maxlength="600" style="min-height:4.5em" placeholder="For example: focus on React and system design, and push me on numbers."></textarea>
+        <div class="grid-2 field">
+          <div>
+            <label>Language</label>
+            <div class="choices">
+              <label><input type="radio" name="lang" value="en" checked><span>English</span></label>
+              <label><input type="radio" name="lang" value="bn"><span>Bangla</span></label>
+              <label><input type="radio" name="lang" value="mixed"><span>Bangla and English</span></label>
+            </div>
+          </div>
+          <div>
+            <label>Feedback</label>
+            <div class="choices">
+              <label><input type="radio" name="mode" value="practice" checked><span>After each question</span></label>
+              <label><input type="radio" name="mode" value="real"><span>At the end</span></label>
+            </div>
+          </div>
         </div>
-        <div class="field">
-          <label for="own">Questions you want to be asked <span class="faint">(optional, one per line)</span></label>
-          <textarea id="own" name="own" maxlength="3000" style="min-height:4.5em" placeholder="Why did you leave your last job?"></textarea>
+        <div class="field" id="count-field">
+          <label for="count">Number of questions</label>
+          <input id="count" name="count" type="number" min="2" max="12" value="5" style="max-width:8rem">
         </div>
+        <div class="wiz-nav"><button type="button" class="btn btn-quiet" data-back>Back</button><button type="button" class="btn btn-primary" data-next>Continue</button></div>
       </section>
 
-      <section class="step">
-        <div class="step-title"><b>5</b><h2>Your questions</h2></div>
-        <p class="muted" id="plan-intro">The interviewer prepares the questions first so you can check them. Nothing is asked until you press Start.</p>
-        <div class="row"><button type="button" class="btn" id="plan-btn">Prepare my questions</button><span class="small" id="plan-status" role="status"></span></div>
-        <div id="profile" class="panel panel-tight" hidden style="margin-top:1.2rem"></div>
+      <section class="wiz-step" data-step="5" hidden>
+        <h2>Your questions</h2>
+        <p class="muted">Pick the topics you want to be asked about, then check the questions. Edit, remove or add any of them.</p>
+        <div class="field" id="topics-field" hidden>
+          <label>Topics from your CV <span class="faint">(tap to include or leave out)</span></label>
+          <div class="chips" id="topics"></div>
+        </div>
+        <div class="grid-2 field">
+          <div>
+            <label for="instructions">Anything to focus on? <span class="faint">(optional)</span></label>
+            <textarea id="instructions" name="instructions" maxlength="600" style="min-height:4.6em" placeholder="Push me on numbers. Ask about teamwork."></textarea>
+          </div>
+          <div>
+            <label for="own">Questions you want asked <span class="faint">(one per line)</span></label>
+            <textarea id="own" name="own" maxlength="3000" style="min-height:4.6em" placeholder="Why did you leave your last job?"></textarea>
+          </div>
+        </div>
+        <div class="row" style="margin-top:1.2rem"><button type="button" class="btn" id="plan-btn">Prepare my questions</button><span class="small" id="plan-status" role="status"></span></div>
         <ol class="plan" id="plan" style="margin-top:1rem"></ol>
         <div class="row" id="plan-add" hidden style="margin-top:.8rem">
           <input type="text" id="add-q" placeholder="Add a question of your own" style="flex:1 1 18rem">
           <button type="button" class="btn btn-small" id="add-q-btn">Add</button>
         </div>
         <p class="error-box" id="setup-error" role="alert" hidden style="margin-top:1rem"></p>
-        <div class="row" style="margin-top:1.4rem">
-          <button type="button" class="btn btn-primary btn-big" id="start-btn" disabled>Start the interview</button>
+        <div class="wiz-nav" style="align-items:center">
+          <button type="button" class="btn btn-quiet" data-back>Back</button>
+          <div class="row"><span class="small faint" id="estimate"></span><button type="button" class="btn btn-primary btn-big" id="start-btn" disabled>Start the interview</button></div>
         </div>
       </section>
     </form>
-
-    <aside class="stack">
-      <div class="panel">
-        <div class="who-card">
-          <div class="monogram" id="who-mono" aria-hidden="true"></div>
-          <div><b id="who-name"></b><div class="muted small" id="who-role"></div></div>
-        </div>
-        <p class="small muted" id="who-note" style="margin:.9rem 0 0"></p>
-      </div>
-      <div class="panel panel-tight" id="ai-box"></div>
-      <p class="small faint" id="estimate"></p>
-    </aside>
   </div>
 </div>
-<script type="application/json" id="setup-data">{{ {"packs": packs, "prompts": prompts, "selected": selected, "previous": previous} | tojson }}</script>
+<script type="application/json" id="setup-data">{{ {"packs": packs, "prompts": prompts, "journey": journey, "selected": selected, "previous": previous, "has_pass": has_pass, "signed_in": user is not none, "role": request.query_params.get('role', ''), "journey_param": request.query_params.get('journey', '')} | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/room.js?v={{ v }}"></script>{% endblock %}
+{% block scripts %}<script type="module" src="/static/setup.js?v={{ v }}"></script>{% endblock %}
