@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set nav = 'settings' %}
+{% block title %}Settings — {{ app_name }}{% endblock %}
+{% block main %}
+<div class="narrow page">
+  <div class="page-head"><h1>Settings</h1></div>
+
+  <section id="ai">
+    <h2>Your AI</h2>
+    <p class="muted">The interviewer and the feedback run on the AI you connect here. Keys are stored in this browser only, so connect again on another device.</p>
+    <div id="connections"></div>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Voice</h2>
+    <p class="muted">These use your browser's built-in voices and speech recognition. Chrome and Edge have the best ones.</p>
+    <form id="voice-form" class="stack">
+      <div class="grid-2">
+        <div><label for="voice-en">English voice</label><select id="voice-en" name="voice_en"></select></div>
+        <div><label for="voice-bn">Bangla voice</label><select id="voice-bn" name="voice_bn"></select></div>
+      </div>
+      <div class="grid-2">
+        <div>
+          <label for="rate">Speaking speed</label>
+          <input id="rate" name="rate" type="range" min="0.8" max="1.3" step="0.05" value="1">
+        </div>
+        <div>
+          <label for="silence">Send my answer after this many seconds of silence</label>
+          <input id="silence" name="silence" type="number" min="0" max="15" step="0.5" value="0">
+          <p class="hint">0 means never. You press “I'm done answering” instead.</p>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="auto_listen" checked><span>Start listening as soon as the interviewer finishes</span></label>
+      <div><button class="btn btn-small" id="voice-test" type="button">Play a sample</button></div>
+    </form>
+  </section>
+
+  <hr>
+
+  <section id="privacy" class="stack">
+    <h2>Privacy and your data</h2>
+    <label class="check"><input type="checkbox" id="save-transcripts" {% if user.saves_transcripts %}checked{% endif %}><span>Save transcripts with my reports<span class="hint" style="display:block">Off: reports keep scores and feedback, but not your words.</span></span></label>
+    <p><a class="btn btn-small" href="/api/me/export">Download all my data</a></p>
+    <form method="post" action="/account/delete" class="panel stack" style="--gap:.7rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <b>Delete my account</b>
+      <p class="small muted" style="margin:0">This permanently removes your account and every interview. Type <b>delete</b> to confirm.</p>
+      {% if request.query_params.get('delete') == 'confirm' %}<p class="error-box small" style="margin:0">Type the word delete to confirm.</p>{% endif %}
+      <div class="row"><input type="text" name="confirm" aria-label="Type delete to confirm" style="max-width:12rem"><button class="btn btn-danger btn-small" type="submit">Delete everything</button></div>
+    </form>
+  </section>
+
+  <hr>
+
+  <section>
+    <h2>Account</h2>
+    <p class="muted">Signed in as {{ user.email }} since {{ user.created_at | short_date }}.</p>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}

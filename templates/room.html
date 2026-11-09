@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Interview in progress — {{ app_name }}{% endblock %}
+{% block head %}{% if user %}<meta name="signed-in" content="1">{% endif %}<meta name="theme-color" content="#121a3f">{% endblock %}
+{% block body_class %}room{% endblock %}
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block main %}
+<div class="room-bar">
+  <span class="title" id="title">Interview</span>
+  <div class="phase" id="phase"></div>
+  <span class="clock" id="clock" role="timer" aria-label="Time spent">0:00</span>
+  <button class="btn btn-small" id="toggle-drawer" type="button" aria-expanded="false" aria-controls="drawer">Transcript</button>
+  <button class="btn btn-small" id="end" type="button">End</button>
+</div>
+
+<div class="banner" id="error" role="alert" hidden>
+  <span id="error-text"></span>
+  <span class="row">
+    <button class="btn btn-small" id="error-retry" type="button">Try again</button>
+    <button class="btn btn-small" id="error-ai" type="button">Change AI</button>
+  </span>
+</div>
+
+<div class="room-main">
+  <section class="stage" aria-label="Interview">
+    <div class="tiles">
+      <div class="tile" id="tile-ai">
+        <span class="ring" aria-hidden="true"></span>
+        <div class="monogram" id="ai-mono" aria-hidden="true"></div>
+        <span class="tile-state" id="ai-state"></span>
+        <span class="tile-name" id="ai-name"></span>
+      </div>
+      <div class="tile you" id="tile-you">
+        <div class="meter" id="meter" aria-hidden="true"></div>
+        <span class="tile-state" id="you-state"></span>
+        <span class="tile-name">You</span>
+      </div>
+    </div>
+    <div class="stack">
+      <p class="caption" id="caption" aria-live="polite"></p>
+      <p class="hint-box" id="hint-box" hidden></p>
+      <div class="answer-box" id="answer-box" hidden>
+        <label class="sr-only" for="answer">Your answer</label>
+        <textarea id="answer" placeholder="Type your answer"></textarea>
+        <div class="spread"><span id="answer-info"></span><button class="btn btn-primary btn-small" id="send" type="button">Send answer</button></div>
+      </div>
+    </div>
+  </section>
+  <aside class="drawer" id="drawer" hidden>
+    <div class="spread"><h3 style="margin:0">Transcript</h3><button class="btn btn-small btn-quiet" id="close-drawer" type="button">Close</button></div>
+    <div id="turns" style="margin-top:1rem"></div>
+    <h3 style="margin-top:1.8rem">What the AI saw</h3>
+    <p class="small" style="color:#aab2d9">Every request sent to your AI in this tab, with its raw reply. Your key is never part of it.</p>
+    <div class="ai-log" id="ai-log"></div>
+  </aside>
+</div>
+
+<div class="controls">
+  <button class="btn mic" id="mic" type="button">Start speaking</button>
+  <button class="btn btn-primary" id="done" type="button">I'm done answering</button>
+  <button class="btn" id="type-toggle" type="button">Type instead</button>
+  <button class="btn" id="repeat" type="button">Repeat the question</button>
+  <button class="btn" id="hint" type="button">Hint</button>
+  <button class="btn" id="skip" type="button">Skip</button>
+  <button class="btn" id="pause" type="button">Pause</button>
+</div>
+
+<div class="overlay" id="lobby">
+  <div class="sheet lobby">
+    <div class="who-card">
+      <div class="monogram" id="lobby-mono" aria-hidden="true"></div>
+      <div><b id="lobby-name"></b><div class="muted small" id="lobby-role"></div></div>
+    </div>
+    <h2 id="lobby-title" style="margin:0">Ready when you are</h2>
+    <ul class="muted" id="lobby-facts" style="margin:0;padding-left:1.1rem"></ul>
+    <div id="lobby-ai"></div>
+    <div id="lobby-mic" class="row" hidden>
+      <button class="btn btn-small" id="mic-check" type="button">Check my microphone</button>
+      <span class="small" id="mic-check-result" role="status"></span>
+    </div>
+    <p class="small muted" style="margin:0">Take a slow breath first. Answer the way you would in the real interview. Space starts and stops the microphone, Esc pauses.</p>
+    <button class="btn btn-primary btn-big" id="begin" type="button">Start the interview</button>
+  </div>
+</div>
+<div class="overlay" id="feedback" hidden><div class="sheet" id="feedback-body" role="dialog" aria-label="Feedback"></div></div>
+<div class="overlay" id="paused" hidden>
+  <div class="sheet stack"><h2>Paused</h2><p class="muted">Take your time. The clock has stopped.</p><button class="btn btn-primary" id="resume" type="button">Carry on</button></div>
+</div>
+<div class="overlay" id="finishing" hidden>
+  <div class="sheet stack"><h2>Writing your report</h2><p class="muted" id="finishing-text" role="status">Scoring your answers…</p></div>
+</div>
+<div class="overlay" id="lost" hidden>
+  <div class="sheet stack">
+    <h2>This interview can't be opened here</h2>
+    <p class="muted">It was set up in another tab or browser, or this tab was closed before it finished. Setting up a new one takes a minute.</p>
+    <a class="btn btn-primary" href="/app/new">Set up an interview</a>
+  </div>
+</div>
+<script type="application/json" id="room-data">{{ {"session": session.id, "prompts": prompts} | tojson }}</script>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/room.js?v={{ v }}"></script>{% endblock %}

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ app_name }} — rehearse your interview out loud{% endblock %}</title>
+<meta name="description" content="{% block description %}Practise job interviews out loud with an interviewer that reads your CV, asks follow-ups and marks up your answers. Works with the AI you already use.{% endblock %}">
+<meta name="csrf" content="{{ csrf }}">
+<meta name="application-name" content="{{ app_name }}">
+<meta name="theme-color" content="#f3f5f9">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wdth,wght@75..125,300..700&family=Archivo:wdth,wght@62..125,300..800&family=Caveat:wght@500..700&display=swap">
+<link rel="stylesheet" href="/static/style.css?v={{ v }}">
+<link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% block header %}
+{% if flags and flags.announcement %}<div class="announce">{{ flags.announcement }}</div>{% endif %}
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="{{ '/app' if user else '/' }}">{{ app_name }}{% if app_name == 'Mohora' %} <small lang="bn">মহড়া</small>{% endif %}</a>
+    <nav class="nav" aria-label="Main">
+      {% if user %}
+        <a href="/app" {% if nav == 'home' %}aria-current="page"{% endif %}>Practice</a>
+        <a href="/app/new" {% if nav == 'new' %}aria-current="page"{% endif %}>New interview</a>
+        <a class="hide-sm" href="/app/settings" {% if nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+        {% if user.is_admin %}<a class="hide-sm" href="/admin" {% if nav == 'admin' %}aria-current="page"{% endif %}>Admin</a>{% endif %}
+        <form method="post" action="/auth/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn btn-quiet btn-small" type="submit">Sign out</button>
+        </form>
+      {% else %}
+        <a class="hide-sm" href="/#how">How it works</a>
+        <a class="hide-sm" href="{{ repo_url }}">Source code</a>
+        <a href="/login">Sign in</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+{% endblock %}
+<main id="main">{% block main %}{% endblock %}</main>
+{% block footer %}
+<footer class="foot">
+  <div class="wrap">
+    <span>© 2026 Tayb Hassan Shizan. Open source under the MIT licence.</span>
+    <nav aria-label="Footer">
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="{{ repo_url }}">Source code</a>
+      <a href="{{ repo_url }}/issues">Report a problem</a>
+    </nav>
+  </div>
+</footer>
+{% endblock %}
+<dialog id="ai-dialog" aria-labelledby="ai-dialog-title">
+  <div class="dialog-head">
+    <h2 id="ai-dialog-title">Your AI</h2>
+    <form method="dialog"><button class="btn btn-quiet btn-small">Close</button></form>
+  </div>
+  <div class="ai-dialog-body"></div>
+</dialog>
+<div class="toasts" aria-live="polite"></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

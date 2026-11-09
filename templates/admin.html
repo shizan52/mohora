@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% set nav = 'admin' %}
+{% block title %}Admin — {{ app_name }}{% endblock %}
+{% block footer %}{% endblock %}
+{% block main %}
+<div class="wrap admin">
+  <nav class="admin-nav" aria-label="Admin">
+    <a href="/admin" {% if view == 'overview' %}aria-current="page"{% endif %}>Overview</a>
+    <a href="/admin/users" {% if view in ('users', 'user') %}aria-current="page"{% endif %}>Users</a>
+    <a href="/admin/packs" {% if view in ('packs', 'pack') %}aria-current="page"{% endif %}>Interview types</a>
+    <a href="/admin/inbox" {% if view == 'inbox' %}aria-current="page"{% endif %}>Inbox</a>
+    <a href="/admin/settings" {% if view == 'settings' %}aria-current="page"{% endif %}>Site settings</a>
+  </nav>
+
+  <div>
+  {% if request.query_params.get('saved') %}<p class="note" role="status">Saved.</p>{% endif %}
+
+  {% if view == 'overview' %}
+    <h1 style="font-size:2.4rem">Overview</h1>
+    <div class="kpis">
+      <div><b>{{ stats.users }}</b><span>people signed up</span></div>
+      <div><b>{{ stats.new_day }}</b><span>new in the last day</span></div>
+      <div><b>{{ stats.new_week }}</b><span>new this week</span></div>
+      <div><b>{{ stats.active_week }}</b><span>active this week</span></div>
+      <div><b>{{ stats.completed_week }}<span class="faint" style="font-size:1rem"> / {{ stats.started_week }}</span></b><span>interviews finished / started this week</span></div>
+      <div><b>{{ stats.avg_minutes }}</b><span>average minutes per interview</span></div>
+    </div>
+    {% if new_feedback %}<p class="note"><a href="/admin/inbox">{{ new_feedback }} new message{{ 's' if new_feedback != 1 }} in the inbox.</a></p>{% endif %}
+
+    <div class="two-col">
+      <section class="panel">
+        <h3>Sign-ups, last 14 days</h3>
+        <div class="bars" role="img" aria-label="Sign-ups per day">
+          {% for d, n in signups %}<div style="--h:{{ (n / peak) | round(3) }}" title="{{ d.day }} {{ d.strftime('%b') }}: {{ n }}"></div>{% endfor %}
+        </div>
+        <div class="bars-x"><span>{{ signups[0][0].day }} {{ signups[0][0].strftime('%b') }}</span><span>today</span></div>
+      </section>
+      <section class="panel">
+        <h3>Funnel, last 30 days</h3>
+        {% set top = funnel[0][1] or 1 %}
+        <ul class="list funnel" style="margin:0">
+          {% for label, n in funnel %}
+          <li style="display:grid"><span>{{ label }}</span><b class="num">{{ n }}</b><div class="bar"><i style="--v:{{ (n / top * 5) | round(2) }}"></i></div></li>
+          {% endfor %}
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>AI providers people connect</h3>
+        {% if providers %}<table><tbody>{% for name, n in providers %}<tr><td>{{ name or 'unknown' }}</td><td class="num">{{ n }}</td></tr>{% endfor %}</tbody></table>
+        {% else %}<p class="muted">No connections recorded yet.</p>{% endif %}
+      </section>
+      <section class="panel">
+        <h3>Interview types, last 30 days</h3>
+        {% if packs %}<table><tbody>{% for slug, n in packs %}<tr><td>{{ slug }}</td><td class="num">{{ n }}</td></tr>{% endfor %}</tbody></table>
+        {% else %}<p class="muted">No interviews yet.</p>{% endif %}
+      </section>
+    </div>
+
+    <h3 style="margin-top:2rem">Newest people</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Email</th><th>From</th><th>Joined</th></tr></thead>
+      <tbody>{% for u in recent %}<tr><td><a href="/admin/users/{{ u.id }}">{{ u.name or '(no name)' }}</a></td><td>{{ u.email }}</td><td>{{ u.country }}{% if u.source %}, via {{ u.source }}{% endif %}</td><td>{{ u.created_at | ago }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">Nobody yet. Share the link.</td></tr>{% endfor %}</tbody>
+    </table></div>
+
+  {% elif view == 'users' %}
+    <div class="spread"><h1 style="font-size:2.4rem;margin:0">Users</h1><span class="muted">{{ total }} total</span></div>
+    <form method="get" class="row" style="margin:1rem 0">
+      <input type="search" name="q" value="{{ q }}" placeholder="Search name or email" style="max-width:22rem">
+      <button class="btn btn-small" type="submit">Search</button>
+    </form>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Email</th><th>Interviews</th><th>Status</th><th>Last seen</th><th>Joined</th></tr></thead>
+      <tbody>{% for u in rows %}<tr>
+        <td><a href="/admin/users/{{ u.id }}">{{ u.name or '(no name)' }}</a>{% if u.is_admin %} <span class="tag">admin</span>{% endif %}</td>
+        <td>{{ u.email }}</td><td class="num">{{ done.get(u.id, 0) }}</td>
+        <td>{{ u.status }}{% if u.has_pass %}, pass{% endif %}</td><td>{{ u.last_seen_at | ago }}</td><td>{{ u.created_at | short_date }}</td>
+      </tr>{% else %}<tr><td colspan="6" class="muted">No one matches.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if pages > 1 %}<div class="row" style="margin-top:1rem">
+      {% if page > 1 %}<a class="btn btn-small" href="?q={{ q | urlencode }}&page={{ page - 1 }}">Newer</a>{% endif %}
+      <span class="muted">Page {{ page }} of {{ pages }}</span>
+      {% if page < pages %}<a class="btn btn-small" href="?q={{ q | urlencode }}&page={{ page + 1 }}">Older</a>{% endif %}
+    </div>{% endif %}
+
+  {% elif view == 'user' %}
+    <p><a href="/admin/users">All users</a></p>
+    <div class="who-card" style="margin-bottom:1.5rem">
+      {% if person.avatar_url %}<img class="avatar" src="{{ person.avatar_url }}" alt="" style="width:56px;height:56px">{% else %}<div class="monogram">{{ (person.name or person.email)[:1] | upper }}</div>{% endif %}
+      <div><h1 style="font-size:2.2rem;margin:0">{{ person.name or person.email }}</h1><div class="muted">{{ person.email }}</div></div>
+    </div>
+    <div class="two-col">
+      <section class="panel stack">
+        <table><tbody>
+          <tr><th>Status</th><td>{{ person.status }}{% if person.is_admin %}, admin{% endif %}</td></tr>
+          <tr><th>Joined</th><td>{{ person.created_at | short_date }} ({{ person.created_at | ago }})</td></tr>
+          <tr><th>Last seen</th><td>{{ person.last_seen_at | ago }}</td></tr>
+          <tr><th>Country, source</th><td>{{ person.country or 'unknown' }}{% if person.source %}, via {{ person.source }}{% endif %}</td></tr>
+          <tr><th>Goal</th><td>{{ person.goal.role or '' }}{% if person.goal.date %}, interview {{ person.goal.date }}{% endif %}</td></tr>
+          <tr><th>Pass</th><td>{{ person.pass_until | short_date if person.has_pass else 'none' }}</td></tr>
+        </tbody></table>
+        <div class="row">
+          {% macro action(name, label, cls='btn btn-small') %}
+          <form method="post" action="/admin/users/{{ person.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="{{ name }}"><button class="{{ cls }}" type="submit">{{ label }}</button></form>
+          {% endmacro %}
+          {% if person.id != user.id %}
+            {% if person.status == 'active' %}{{ action('block', 'Block', 'btn btn-small btn-danger') }}{% else %}{{ action('unblock', 'Unblock') }}{% endif %}
+            {{ action('toggle-admin', 'Remove admin' if person.is_admin else 'Make admin') }}
+          {% endif %}
+        </div>
+        <form method="post" action="/admin/users/{{ person.id }}" class="row">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="grant">
+          <input type="number" name="days" min="1" max="3650" value="14" style="max-width:7rem" aria-label="Days">
+          <button class="btn btn-small" type="submit">Give pass days</button>
+        </form>
+      </section>
+      <section class="panel">
+        <form method="post" action="/admin/users/{{ person.id }}" class="stack" style="--gap:.6rem">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="notes">
+          <label for="notes">Private notes</label>
+          <textarea id="notes" name="notes">{{ person.notes }}</textarea>
+          <div><button class="btn btn-small" type="submit">Save notes</button></div>
+        </form>
+      </section>
+    </div>
+    <h3 style="margin-top:2rem">Interviews</h3>
+    <p class="small muted">Scores only. Transcripts are private to the user.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Type</th><th>Role</th><th>Status</th><th>Score</th><th>Length</th><th>When</th></tr></thead>
+      <tbody>{% for s in sessions %}<tr><td>{{ s.pack_slug }}</td><td>{{ s.config.role }}</td><td>{{ s.status }}</td><td class="num">{{ s.overall if s.overall is not none else '' }}</td><td>{{ s.duration_s // 60 }} min</td><td>{{ s.started_at | ago }}</td></tr>
+      {% else %}<tr><td colspan="6" class="muted">None yet.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <h3 style="margin-top:2rem">Recent activity</h3>
+    <ul class="list small">{% for e in events %}<li><span>{{ e.name }}{% for k, v in e.props.items() %}, {{ k }}: {{ v }}{% endfor %}</span><span class="faint">{{ e.ts | ago }}</span></li>{% else %}<li class="muted">Nothing recorded.</li>{% endfor %}</ul>
+
+  {% elif view == 'packs' %}
+    <div class="spread"><h1 style="font-size:2.4rem;margin:0">Interview types</h1><a class="btn btn-small" href="/admin/packs/new">Add a type</a></div>
+    <p class="muted">Each type is a JSON document: interviewer, opener, competencies, question bank, rubric and rules. Edit it here; no deploy needed.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Interviews</th><th>Updated</th></tr></thead>
+      <tbody>{% for p in rows %}<tr>
+        <td><a href="/admin/packs/{{ p.slug }}">{{ p.data.title }}</a></td><td>{{ p.slug }}</td>
+        <td>{{ 'live' if p.active else 'hidden' }}{% if p.pro %}, needs pass{% endif %}</td>
+        <td class="num">{{ usage.get(p.slug, 0) }}</td><td>{{ p.updated_at | ago }}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+
+  {% elif view == 'pack' %}
+    <p><a href="/admin/packs">All interview types</a></p>
+    <h1 style="font-size:2.2rem">{{ pack.data.title if pack else 'New interview type' }}</h1>
+    {% if error %}<p class="error-box" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/admin/packs/{{ pack.slug if pack else 'new' }}" class="stack">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label for="source" class="sr-only">Pack JSON</label>
+      <textarea id="source" name="source" class="code" spellcheck="false">{{ source }}</textarea>
+      <label class="check"><input type="checkbox" name="active" value="true" {% if not pack or pack.active %}checked{% endif %}><span>Live on the site</span></label>
+      <div><button class="btn btn-primary" type="submit">Save</button></div>
+    </form>
+
+  {% elif view == 'inbox' %}
+    <h1 style="font-size:2.4rem">Inbox</h1>
+    <ul class="list">{% for f in rows %}
+      <li style="align-items:flex-start">
+        <div style="flex:1 1 30rem">
+          <div class="small faint">{{ f.kind }}, {{ f.created_at | ago }}{% if f.page %}, on {{ f.page }}{% endif %}{% if f.user_id %}, <a href="/admin/users/{{ f.user_id }}">user {{ f.user_id }}</a>{% endif %}</div>
+          <p style="margin:.3rem 0 0;white-space:pre-wrap">{{ f.message }}</p>
+        </div>
+        <form method="post" action="/admin/inbox/{{ f.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-small" type="submit">{{ 'Mark done' if f.status == 'new' else 'Reopen' }}</button></form>
+      </li>
+    {% else %}<li class="muted">No messages yet.</li>{% endfor %}</ul>
+
+  {% elif view == 'settings' %}
+    <h1 style="font-size:2.4rem">Site settings</h1>
+    <form method="post" action="/admin/settings/flags" class="panel stack">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% for key, label in labels.items() %}
+      <label class="check"><input type="checkbox" name="{{ key }}" {% if flags[key] %}checked{% endif %}><span>{{ label }}</span></label>
+      {% endfor %}
+      <div class="field"><label for="announcement">Banner at the top of every page <span class="faint">(empty for none)</span></label><input id="announcement" name="announcement" type="text" maxlength="300" value="{{ flags.announcement }}"></div>
+      <div><button class="btn btn-primary" type="submit">Save settings</button></div>
+    </form>
+
+    <h2 id="prompts" style="margin-top:2.5rem">Prompts</h2>
+    <p class="muted">The instructions sent to the AI. Words in {braces} are filled in by the app; keep them. Double braces are literal braces.</p>
+    <form method="post" action="/admin/settings/prompts" class="stack">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% for key, text in prompts.items() %}
+      <div class="field"><label for="p-{{ key }}">{{ key }}</label><textarea id="p-{{ key }}" name="{{ key }}" class="code" style="min-height:14rem" spellcheck="false">{{ text }}</textarea></div>
+      {% endfor %}
+      <div><button class="btn btn-primary" type="submit">Save prompts</button></div>
+    </form>
+
+    <h2 style="margin-top:2.5rem">Admin activity</h2>
+    <ul class="list small">{% for a in log %}<li><span>{{ a.actor }}: {{ a.action }}{% if a.target %} on {{ a.target }}{% endif %}</span><span class="faint">{{ a.ts | ago }}</span></li>{% else %}<li class="muted">Nothing yet.</li>{% endfor %}</ul>
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

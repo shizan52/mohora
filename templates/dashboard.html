@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% set nav = 'home' %}
+{% block title %}Practice — {{ app_name }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <h1>Hello, {{ user.first_name }}.</h1>
+    {% if goal.role %}
+    <p class="lede">Preparing for {{ goal.role }}{% if days_left is not none and days_left >= 0 %}: {{ 'the interview is today' if days_left == 0 else days_left ~ ' day' ~ ('s' if days_left != 1) ~ ' to go' }}{% endif %}.</p>
+    {% endif %}
+  </div>
+
+  <div class="dash">
+    <div class="stack" style="--gap:2.5rem">
+      {% if unfinished %}
+      <p class="note" style="margin:0">You left an interview halfway. <a href="/app/room/{{ unfinished.id }}">Pick it up</a> if it's still open in this browser.</p>
+      {% endif %}
+
+      {% set p = packs.get(suggest) %}
+      {% if p %}
+      <div class="cue next-card">
+        <div class="cue-label"><span>{{ 'Suggested next' if total else 'Your first interview' }}</span><span>{{ p.minutes }} min</span></div>
+        <h2>{{ p.title }}{% if goal.role %} for {{ goal.role }}{% endif %}</h2>
+        <p class="muted">{{ p.summary }}</p>
+        <div class="row">
+          <a class="btn btn-primary btn-big" href="/app/new?pack={{ p.slug }}">Set it up</a>
+          <a class="btn" href="/app/new">Choose something else</a>
+        </div>
+      </div>
+      {% endif %}
+
+      <section>
+        <div class="spread">
+          <h2 style="margin:0;font-size:1.7rem">Recent interviews</h2>
+          {% if spark %}<svg class="spark" viewBox="0 0 160 36" role="img" aria-label="Your scores over time"><polyline points="{{ spark }}"/></svg>{% endif %}
+        </div>
+        {% if sessions %}
+        <ul class="list" style="margin-top:1rem">
+          {% for s in sessions %}
+          <li>
+            <div>
+              <b>{{ packs[s.pack_slug].title if s.pack_slug in packs else s.pack_slug }}</b>
+              <span class="muted">for {{ s.config.role }}</span>
+              <div class="small faint">{{ s.started_at | ago }}, {{ s.duration_s // 60 }} min</div>
+            </div>
+            <div class="row">
+              <span class="score">{{ s.overall if s.overall is not none else '–' }}<small> / 5</small></span>
+              <a href="/app/session/{{ s.id }}">Open report</a>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="empty" style="margin-top:1rem">
+          <p style="margin:0">No interviews yet. The first one takes about ten minutes, and you get your answers back marked up at the end.</p>
+        </div>
+        {% endif %}
+      </section>
+    </div>
+
+    <aside class="stack">
+      <div class="panel" id="ai-status"></div>
+      {% if total %}
+      <div class="panel">
+        <p style="margin:0">{{ total }} interview{{ 's' if total != 1 }} finished{% if this_week %}, {{ this_week }} this week{% endif %}.{% if recent_avg %} Your recent average is {{ recent_avg }} out of 5.{% endif %}</p>
+      </div>
+      {% endif %}
+      <div class="panel">
+        <h3>Something not right?</h3>
+        <form id="feedback-form" class="stack" style="--gap:.7rem">
+          <label class="sr-only" for="fb-message">Message</label>
+          <textarea id="fb-message" name="message" required minlength="3" maxlength="4000" placeholder="A bug, an idea, a question that felt off…" style="min-height:5em"></textarea>
+          <div class="row">
+            <select name="kind" aria-label="Kind" style="width:auto">
+              <option value="bug">Bug</option>
+              <option value="idea">Idea</option>
+              <option value="general" selected>Other</option>
+            </select>
+            <button class="btn btn-small" type="submit">Send</button>
+          </div>
+        </form>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}

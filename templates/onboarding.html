@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Welcome — {{ app_name }}{% endblock %}
+{% block main %}
+<div class="narrow page">
+  <div class="steps" aria-label="Setup steps">
+    <span aria-current="step">Your goal</span>
+    <span>Your AI</span>
+  </div>
+
+  <section id="step-goal">
+    <h1>What are you preparing for?</h1>
+    <p class="lede">This shapes the first interview we suggest. You can change everything later.</p>
+    <form id="goal-form" class="stack" style="--gap:1.3rem">
+      <div class="field">
+        <label for="g-role">Job title you're going for</label>
+        <input id="g-role" name="role" type="text" maxlength="120" required placeholder="For example: Junior Data Analyst">
+      </div>
+      <div class="grid-2">
+        <div>
+          <label for="g-level">Your level</label>
+          <select id="g-level" name="level">
+            <option value="intern">Intern</option>
+            <option value="fresher">Fresh graduate</option>
+            <option value="junior" selected>Junior</option>
+            <option value="mid">Mid-level</option>
+            <option value="senior">Senior</option>
+            <option value="lead">Lead or manager</option>
+          </select>
+        </div>
+        <div>
+          <label for="g-date">Interview date <span class="faint">(if you know it)</span></label>
+          <input id="g-date" name="date" type="date">
+        </div>
+      </div>
+      <div class="field">
+        <label>Which kind of interview worries you most?</label>
+        <div class="packs">
+          {% for p in packs %}
+          <label><input type="radio" name="pack" value="{{ p.slug }}" {% if loop.first %}checked{% endif %}><span class="opt"><b>{{ p.title }}</b><span>{{ p.summary }}</span></span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div><button class="btn btn-primary btn-big" type="submit">Continue</button></div>
+    </form>
+  </section>
+
+  <section id="step-ai" hidden>
+    <h1>Connect the AI that will interview you</h1>
+    <p class="lede">The quickest free start: sign in with OpenRouter, or get a free Google Gemini key.</p>
+    <div id="onboard-ai" style="margin:1.5rem 0"></div>
+    <div class="row">
+      <a class="btn btn-primary btn-big" href="/app">Done, take me to practice</a>
+      <a class="btn btn-quiet" href="/app">Skip for now</a>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}

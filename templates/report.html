@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% set nav = 'home' %}
+{% set sources = {'opener': 'Opener', 'cv': 'From your CV', 'jd': 'From the job post', 'role': 'For the role', 'you': 'Your question'} %}
+{% set labels = {} %}
+{% for item in r.rubric %}{% set _ = labels.update({item.id: item.label}) %}{% endfor %}
+{% block title %}Report: {{ pack.title }} — {{ app_name }}{% endblock %}
+{% block main %}
+<div class="wrap page">
+  {% if not user %}
+  <p class="note no-print">This report is only in this browser for now. <a href="/login?next=/app/session/{{ session.id }}">Sign in</a> to keep it and track your progress.</p>
+  {% endif %}
+
+  <div class="report-head">
+    <div>
+      <p class="muted" style="margin-bottom:.4rem">{{ pack.title }} for {{ r.options.role }}{% if r.options.company %} at {{ r.options.company }}{% endif %}, {{ session.started_at | short_date }}, {{ session.duration_s // 60 }} min</p>
+      <h1>{{ r.summary.headline if r.summary and r.summary.headline else 'Your interview report' }}</h1>
+    </div>
+    <div class="big-score" aria-label="Overall score">{{ r.overall if r.overall is not none else '–' }}<small> / 5</small></div>
+  </div>
+
+  <div class="split">
+    <div class="stack">
+      {% if r.summary and r.summary.best_moment %}
+      <div>
+        <h2 style="font-size:1.5rem">Your best moment</h2>
+        <p class="best"><mark class="m-strong">“{{ r.summary.best_moment.quote }}”</mark></p>
+        {% if r.summary.best_moment.why %}<p class="muted">{{ r.summary.best_moment.why }}</p>{% endif %}
+      </div>
+      {% endif %}
+      {% if r.summary and r.summary.fix_next %}
+      <div class="fix">
+        <b>Fix this next</b>
+        <p style="margin:.3rem 0 0">{{ r.summary.fix_next }}</p>
+      </div>
+      {% endif %}
+      {% if r.summary and (r.summary.strengths or r.summary.focus) %}
+      <div class="grid-2">
+        {% if r.summary.strengths %}<div><b>Strengths</b><ul>{% for s in r.summary.strengths %}<li>{{ s }}</li>{% endfor %}</ul></div>{% endif %}
+        {% if r.summary.focus %}<div><b>Work on</b><ul>{% for s in r.summary.focus %}<li>{{ s }}</li>{% endfor %}</ul></div>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="stack">
+      <h2 style="font-size:1.5rem">Scores across the interview</h2>
+      <div class="rubric">
+        {% for item in r.rubric %}
+        <span>{{ item.label }}</span>
+        <div class="bar{% if item.avg is not none and item.avg <= 2 %} low{% elif item.avg is not none and item.avg >= 4 %} high{% endif %}"><i style="--v:{{ item.avg or 0 }}"></i></div>
+        <span class="num">{{ item.avg if item.avg is not none else '–' }}</span>
+        {% endfor %}
+      </div>
+      <div class="stats" style="margin-top:1rem">
+        {% set d = r.delivery %}
+        <div><b>{{ d.words }}</b><span class="small muted">words you said</span></div>
+        {% if d.wpm %}<div><b>{{ d.wpm }}</b><span class="small muted">words a minute (130 to 160 is easy to follow)</span></div>{% endif %}
+        <div><b>{{ d.filler_rate }}</b><span class="small muted">filler words per 100{% if d.fillers %}: {% for k, n in d.fillers.items() %}{{ k }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}</span></div>
+        {% if d.latency_s is not none and d.spoken %}<div><b>{{ d.latency_s }} s</b><span class="small muted">before you started answering</span></div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="spread" style="margin:3rem 0 0">
+    <h2 style="margin:0">Question by question</h2>
+    <div class="legend"><span><mark class="m-strong">worth keeping</mark></span><span><mark class="m-weak">weakened the answer</mark></span><span><mark class="m-filler">filler</mark></span></div>
+  </div>
+
+  {% for b in r.blocks %}
+  <section class="qblock">
+    <div class="cue">
+      <div class="cue-label">
+        <span>Question {{ loop.index }}{% if b.attempts %}, answered {{ b.attempts + 1 }} times{% endif %}</span>
+        <span>{{ sources.get(b.source, '') }}</span>
+      </div>
+      <p class="cue-q">{{ b.q }}</p>
+    </div>
+    {% if b.skipped %}
+      <p class="muted" style="margin-top:1rem">You skipped this one.</p>
+    {% else %}
+    <div class="qgrid">
+      <div class="transcript stack">
+        {% for t in b.turns %}
+          {% if t.who == 'ai' %}
+            {% if not loop.first %}<p class="q-line">{{ r.interviewer.name }}: {{ t.text }}</p>{% endif %}
+          {% else %}
+            <p>{{ t.text | mark_answer(b.eval.quotes if b.eval else [], r.delivery.terms) }}</p>
+          {% endif %}
+        {% else %}
+          <p class="muted">The transcript wasn't saved because transcript saving is turned off in your settings.</p>
+        {% endfor %}
+        {% if b.eval and b.eval.rewrite %}
+        <div class="rewrite">
+          <b>Your answer, rewritten</b>
+          <p style="margin:.4rem 0 0">{{ b.eval.rewrite }}</p>
+        </div>
+        {% endif %}
+      </div>
+      <div class="stack">
+        {% if b.eval %}
+          <div class="rubric">
+            {% for id, v in b.eval.scores.items() %}
+            <span>{{ labels.get(id, id) }}</span>
+            <div class="bar{% if v <= 2 %} low{% elif v >= 4 %} high{% endif %}"><i style="--v:{{ v }}"></i></div>
+            <span class="num">{{ v }}</span>
+            {% endfor %}
+          </div>
+          {% if b.eval.worked %}<div><b>What worked</b><ul>{% for w in b.eval.worked %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+          {% if b.eval.improve %}<div><b>What to improve</b><ul>{% for w in b.eval.improve %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+          {% for q in b.eval.quotes if q.note %}
+            <p style="margin:0"><mark class="m-{{ q.type }}">“{{ q.text | truncate(70) }}”</mark> <span class="pen">{{ q.note }}</span></p>
+          {% endfor %}
+        {% else %}
+          <p class="error-box">This answer wasn't scored{% if b.eval_error %}: {{ b.eval_error }}{% else %}.{% endif %}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  <div class="row no-print" style="margin-top:2rem">
+    <a class="btn btn-primary" href="/app/new?again={{ session.id }}">Practise this again</a>
+    <a class="btn" href="/app/new">Set up a different interview</a>
+    <button class="btn btn-quiet" type="button" data-print>Print or save as PDF</button>
+  </div>
+  {% if r.ai %}<p class="small faint" style="margin-top:1.5rem">Interviewer model: {{ r.ai.model or 'provider default' }}. Feedback model: {{ r.ai.coach or 'provider default' }}. Scores come from an AI and can be wrong; use them as a guide.</p>{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}
