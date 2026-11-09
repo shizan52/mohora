@@ -1,0 +1,16 @@
+[project]
+name = "mohora"
+version = "0.1.0"
+description = "Rehearse job interviews out loud with the AI you already use."
+requires-python = ">=3.12"
+license = "MIT"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies as default arguments.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Form", "fastapi.Query"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+data/
+backups/
+*.db
+*.db-*
+
+# local planning and tooling
+CLAUDE.md
+PLAN.md
+project.md
+graphify-out/
+.claude/
