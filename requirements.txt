@@ -8,6 +8,7 @@ httpx>=0.28
 itsdangerous>=2.2
 python-multipart>=0.0.20
 tzdata>=2024.2
+segno>=1.6
 
 # development
 pytest>=8.3

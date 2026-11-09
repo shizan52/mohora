@@ -100,6 +100,22 @@ class Pack(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    network: Mapped[str] = mapped_column(String(16))
+    tx_id: Mapped[str] = mapped_column(String(100), unique=True)
+    amount: Mapped[float] = mapped_column(Float)
+    days: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    note: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    reviewed_by: Mapped[str] = mapped_column(String(255), default="")
+
+
 class Setting(Base):
     __tablename__ = "settings"
 
@@ -171,7 +187,10 @@ DEFAULT_FLAGS: dict[str, Any] = {
     "maintenance": False,
     "relay": True,
     "announcement": "",
+    "contact_email": "",
 }
+
+DEFAULT_BILLING: dict[str, Any] = {"price_usdt": 1, "days": 30, "trc20_address": "", "bep20_address": ""}
 
 PACKS_FILE = ROOT / "app" / "packs.json"
 
@@ -189,16 +208,18 @@ def init_db() -> None:
 
 
 def seed(db: Session) -> None:
-    """Insert packs and prompts that don't exist yet. Admin edits are never overwritten."""
+    """Add packs, prompts and settings that don't exist yet. Admin edits are never overwritten."""
     data = json.loads(PACKS_FILE.read_text(encoding="utf-8"))
     existing = set(db.scalars(select(Pack.slug)))
     for i, pack in enumerate(data["packs"]):
         if pack["slug"] not in existing:
             db.add(Pack(slug=pack["slug"], data=pack, pro=pack.get("pro", False), sort=i))
-    if db.get(Setting, "prompts") is None:
-        db.add(Setting(key="prompts", value=data["prompts"]))
-    if db.get(Setting, "flags") is None:
-        db.add(Setting(key="flags", value=DEFAULT_FLAGS))
+    prompts = get_setting(db, "prompts") or {}
+    missing = {k: v for k, v in data["prompts"].items() if k not in prompts}
+    if missing or not prompts:
+        set_setting(db, "prompts", {**prompts, **missing})
+    if get_setting(db, "journey") is None:
+        set_setting(db, "journey", data["journey"])
     db.commit()
 
 
@@ -218,6 +239,10 @@ def set_setting(db: Session, key: str, value: Any) -> None:
 
 def site_flags(db: Session) -> dict[str, Any]:
     return {**DEFAULT_FLAGS, **(get_setting(db, "flags") or {})}
+
+
+def billing_settings(db: Session) -> dict[str, Any]:
+    return {**DEFAULT_BILLING, **(get_setting(db, "billing") or {})}
 
 
 _flags_cache: tuple[float, dict[str, Any]] = (0.0, {})

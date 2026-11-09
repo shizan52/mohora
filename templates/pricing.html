@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Pricing — {{ app_name }}{% endblock %}
+{% block main %}
+<section class="section" style="padding-bottom:2rem">
+  <div class="wrap">
+    <div class="section-head center">
+      <h1>Pricing</h1>
+      <p class="lede" style="margin-inline:auto">Practice is free. Pro is one small payment, with no subscription to cancel.</p>
+      {% if user and user.has_pass %}<p class="ok-box" style="display:inline-block;margin-top:1rem">Your Pro pass is active until {{ user.pass_until | short_date }}.</p>{% endif %}
+    </div>
+    <div class="plans" style="margin-inline:auto">
+      <div class="plan-card">
+        <h3>Free</h3>
+        <div class="price">0 <small>forever</small></div>
+        <p class="muted small">Runs on your own AI account or a free key.</p>
+        <ul>
+          <li>Unlimited interviews of every type</li>
+          <li>Questions from your CV and the job post</li>
+          <li>Video call, voice and text modes</li>
+          <li>Two interviewers to choose from</li>
+          <li>Marked-up feedback, rewrites and redo</li>
+          <li>Reports saved to your account</li>
+        </ul>
+        <a class="btn btn-block" href="/app/new">Start practising</a>
+      </div>
+      <div class="plan-card featured">
+        <h3>Pro</h3>
+        <div class="price">{{ '%g' % billing.price_usdt }} USDT <small>for {{ billing.days }} days</small></div>
+        <p class="muted small">Paid once in USDT. It doesn't renew on its own.</p>
+        <ul>
+          <li>Everything in Free</li>
+          <li>The whole hiring process: online application, recruiter call, role interview, behavioral round and final round, in order</li>
+          <li>Pick the stages you need and skip the rest</li>
+          <li>Helps keep this site running</li>
+        </ul>
+        <a class="btn btn-primary btn-block" href="{{ '/pay' if user else '/login?next=/pay' }}">{{ 'Extend Pro' if user and user.has_pass else 'Get Pro' }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="section section-mist">
+  <div class="narrow faq">
+    <h2>About paying</h2>
+    <details open><summary>How do I pay?</summary><p>Send {{ '%g' % billing.price_usdt }} USDT from any wallet or exchange to the address on the payment page, then paste the transaction ID. On the TRON network (TRC20) the payment is checked on the blockchain and Pro starts within a minute. Other networks are checked by hand, usually the same day.</p></details>
+    <details><summary>Why crypto?</summary><p>It works the same from every country, without a card, and the fees on TRON are tiny.</p></details>
+    <details><summary>What if something goes wrong?</summary><p>Every payment is recorded with its transaction ID. If Pro hasn't started, write to us with the ID{% if site().contact_email %} at <a href="mailto:{{ site().contact_email }}">{{ site().contact_email }}</a>{% endif %} and we'll sort it out.</p></details>
+  </div>
+</section>
+{% endblock %}
