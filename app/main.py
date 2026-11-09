@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import admin, auth, notify
+from . import admin, auth, billing, notify
 from .auth import LoginRequired, current_user, guest_token, require_user
 from .config import ROOT, config
 from .db import (
@@ -26,6 +26,7 @@ from .db import (
     Pack,
     SessionLocal,
     User,
+    billing_settings,
     cached_flags,
     get_db,
     get_setting,
@@ -48,12 +49,14 @@ app = FastAPI(title=config.app_name, lifespan=lifespan, docs_url=None, redoc_url
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(billing.router)
 
 # Browser code calls AI providers directly, so connect-src has to allow any HTTPS
 # host (custom OpenAI-compatible URLs) and localhost (Ollama, LM Studio).
 CSP_RULES = (
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net https://js.puter.com",
+    # wasm-unsafe-eval lets the in-browser voice model (WebAssembly) run; it doesn't allow eval().
+    "script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://js.puter.com",
     "style-src 'self' https://fonts.googleapis.com",
     "style-src-attr 'unsafe-inline'",
     "font-src https://fonts.gstatic.com",
@@ -92,7 +95,17 @@ async def site_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "microphone=(self), camera=(self), geolocation=()"
+    if path.startswith(ISOLATED_PATHS):
+        # Cross-origin isolation lets the in-browser voice model use every CPU core, which
+        # makes it several times faster. Only the interview room needs it; elsewhere it
+        # would break sign-in popups. The threaded runtime loads its helper from a blob URL.
+        response.headers["Content-Security-Policy"] = CSP.replace("script-src 'self'", "script-src 'self' blob:")
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
     return response
+
+
+ISOLATED_PATHS = ("/app/room/", "/static/tts-worker.js")
 
 
 # Added last so it wraps the middleware above, which needs request.session.
@@ -180,7 +193,8 @@ def sparkline(values: list[float], width: int = 160, height: int = 36) -> str:
 
 @app.get("/")
 def landing(request: Request, user: User | None = Depends(current_user), db: Session = Depends(get_db)):
-    return render(request, "landing.html", user=user, packs=active_packs(db), flags=cached_flags())
+    return render(request, "landing.html", user=user, packs=active_packs(db), journey=get_setting(db, "journey") or [],
+                  billing=billing_settings(db))
 
 
 @app.get("/privacy")
@@ -198,6 +212,7 @@ LOGIN_ERRORS = {
     "email": "Your Google account has no verified email address.",
     "closed": "New sign-ups are paused right now. Try again later.",
     "blocked": "This account has been blocked. Contact the site owner if you think it's a mistake.",
+    "dev-email": "Enter an email address.",
 }
 
 
@@ -205,8 +220,8 @@ LOGIN_ERRORS = {
 def login_page(request: Request, next: str = "/app", error: str = "", user: User | None = Depends(current_user)):
     if user:
         return RedirectResponse(auth.safe_next(next), 303)
-    return render(request, "simple.html", kind="login", next=auth.safe_next(next),
-                  error=LOGIN_ERRORS.get(error, ""), google=config.google_enabled)
+    return render(request, "login.html", next=auth.safe_next(next), error=LOGIN_ERRORS.get(error, ""),
+                  google=config.google_enabled, dev_login=config.dev_login)
 
 
 @app.get("/onboarding")
@@ -263,8 +278,9 @@ def new_interview(
         old = owned_session(request, db, again, user)
         previous = {**old.config, "pack": old.pack_slug}
     return render(
-        request, "setup.html", user=user, packs=active_packs(db), selected=pack,
-        previous=previous, prompts=get_setting(db, "prompts"), flags=cached_flags(),
+        request, "setup.html", user=user, packs=active_packs(db), selected=pack, previous=previous,
+        prompts=get_setting(db, "prompts"), journey=get_setting(db, "journey") or [],
+        has_pass=bool(user and user.has_pass), flags=cached_flags(), nav="new",
     )
 
 
@@ -282,7 +298,13 @@ def report(request: Request, sid: int, user: User | None = Depends(current_user)
     if s.status != "completed" or not s.report:
         return RedirectResponse(f"/app/room/{sid}", 303)
     pack = db.get(Pack, s.pack_slug)
-    return render(request, "report.html", user=user, session=s, r=s.report,
+    journey = s.config.get("journey") or {}
+    next_stage = None
+    if journey and journey.get("index", 0) + 1 < len(journey.get("stages", [])):
+        slug = journey["stages"][journey["index"] + 1]
+        titles = {stage["pack"]: stage["title"] for stage in get_setting(db, "journey") or []}
+        next_stage = {"title": titles.get(slug, slug), "number": journey["index"] + 2, "total": len(journey["stages"])}
+    return render(request, "report.html", user=user, session=s, r=s.report, next_stage=next_stage,
                   pack=pack.data if pack else {"title": s.pack_slug})
 
 
@@ -316,8 +338,8 @@ def create_session(
     pack = db.get(Pack, body.pack)
     if pack is None or not pack.active:
         raise HTTPException(404, "That interview type isn't available.")
-    if pack.pro and not (user and user.has_pass):
-        raise HTTPException(403, "This interview type needs a pass.")
+    if (pack.pro or body.config.get("journey")) and not (user and user.has_pass):
+        raise HTTPException(403, "This needs Pro. See the pricing page.")
     if user is None:
         if not cached_flags().get("guest_mode"):
             raise LoginRequired

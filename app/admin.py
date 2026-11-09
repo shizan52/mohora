@@ -10,14 +10,17 @@ from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from .auth import require_admin
+from .billing import NETWORKS, review_payment
 from .db import (
     AuditLog,
     Event,
     Feedback,
     InterviewSession,
     Pack,
+    Payment,
     User,
     audit,
+    billing_settings,
     forget_flags,
     get_db,
     get_setting,
@@ -95,10 +98,14 @@ def overview(request: Request, user: User = Depends(require_admin), db: Session 
 
     recent = db.scalars(select(User).order_by(User.created_at.desc()).limit(8))
     new_feedback = _count(db, select(func.count(Feedback.id)).where(Feedback.status == "new"))
+    pending = _count(db, select(func.count(Payment.id)).where(Payment.status == "pending"))
+    revenue = db.scalar(select(func.sum(Payment.amount)).where(Payment.status == "approved")) or 0
+    stats["passes"] = _count(db, users.where(User.pass_until > now))
+    stats["revenue"] = round(revenue, 2)
     return render(
         request, "admin.html", view="overview", user=user, stats=stats, funnel=funnel,
         providers=providers, packs=packs, signups=signups, peak=max([n for _, n in signups] + [1]),
-        recent=list(recent), new_feedback=new_feedback,
+        recent=list(recent), new_feedback=new_feedback, pending=pending,
     )
 
 
@@ -213,6 +220,7 @@ def pack_save(
     db: Session = Depends(get_db),
 ):
     pack = db.get(Pack, slug)
+    data: dict = {}
     try:
         data = json.loads(source)
         error = validate_pack(data) if isinstance(data, dict) else "The pack must be a JSON object."
@@ -238,11 +246,55 @@ def pack_save(
     return RedirectResponse(f"/admin/packs/{pack.slug}?saved=1", 303)
 
 
+@router.get("/payments")
+def payments(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Payment, User.email).join(User, User.id == Payment.user_id)
+        .order_by(Payment.status != "pending", Payment.created_at.desc()).limit(200)
+    ).all()
+    return render(request, "admin.html", view="payments", user=user, rows=rows, networks=NETWORKS,
+                  billing=billing_settings(db))
+
+
+@router.post("/payments/{pid}", dependencies=[Depends(check_csrf)])
+def payment_action(
+    pid: int, action: str = Form(...), user: User = Depends(require_admin), db: Session = Depends(get_db)
+):
+    payment = db.get(Payment, pid) or _not_found()
+    if payment.status != "pending" or action not in ("approve", "reject"):
+        raise HTTPException(400, "Only pending payments can be approved or rejected.")
+    review_payment(db, payment, action == "approve", user.email)
+    return RedirectResponse("/admin/payments", 303)
+
+
 @router.get("/settings")
 def settings_page(request: Request, user: User = Depends(require_admin), db: Session = Depends(get_db)):
     log = db.scalars(select(AuditLog).order_by(AuditLog.ts.desc()).limit(40))
     return render(request, "admin.html", view="settings", user=user, flags=site_flags(db),
-                  labels=FLAG_LABELS, prompts=get_setting(db, "prompts") or {}, log=list(log))
+                  labels=FLAG_LABELS, prompts=get_setting(db, "prompts") or {}, log=list(log),
+                  billing=billing_settings(db), error=request.query_params.get("error", ""))
+
+
+@router.post("/settings/billing", dependencies=[Depends(check_csrf)])
+def save_billing(
+    trc20_address: str = Form(""),
+    bep20_address: str = Form(""),
+    price_usdt: float = Form(1),
+    days: int = Form(30),
+    user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    trc20, bep20 = trc20_address.strip(), bep20_address.strip()
+    if trc20 and not re.fullmatch(r"T[1-9A-HJ-NP-Za-km-z]{33}", trc20):
+        return RedirectResponse("/admin/settings?error=trc20#billing", 303)
+    if bep20 and not re.fullmatch(r"0x[0-9a-fA-F]{40}", bep20):
+        return RedirectResponse("/admin/settings?error=bep20#billing", 303)
+    if not (0 < price_usdt <= 10_000 and 1 <= days <= 3650):
+        return RedirectResponse("/admin/settings?error=price#billing", 303)
+    billing = {"trc20_address": trc20, "bep20_address": bep20, "price_usdt": price_usdt, "days": days}
+    set_setting(db, "billing", billing)
+    audit(db, user.email, "settings.billing", **billing)
+    return RedirectResponse("/admin/settings?saved=1#billing", 303)
 
 
 @router.post("/settings/flags", dependencies=[Depends(check_csrf)])
@@ -252,6 +304,7 @@ async def save_flags(request: Request, user: User = Depends(require_admin), db: 
     for key in FLAG_LABELS:
         flags[key] = form.get(key) == "on"
     flags["announcement"] = str(form.get("announcement", ""))[:300].strip()
+    flags["contact_email"] = str(form.get("contact_email", ""))[:200].strip()
     set_setting(db, "flags", flags)
     forget_flags()
     audit(db, user.email, "settings.flags", **flags)

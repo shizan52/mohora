@@ -1,69 +1,125 @@
 {% extends "base.html" %}
+{% from "ui.html" import icon %}
 {% block main %}
-<section class="wrap hero">
-  <div>
-    <h1>Rehearse your next interview out loud.</h1>
-    <p class="lede">An interviewer that reads your CV, asks follow-ups about what you actually said, and marks up your answers so you know exactly what to fix.</p>
-    <div class="row">
-      <a class="btn btn-primary btn-big" href="/app/new">Start a practice interview</a>
-      {% if not user %}<a class="btn btn-big" href="/login">Sign in with Google</a>{% endif %}
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Rehearse your next interview out loud.</h1>
+      <p class="lede">Add your CV, pick the job, and talk to an interviewer on a video call. It follows up on what you actually said, then marks up every answer so you know exactly what to fix.</p>
+      <div class="row">
+        <a class="btn btn-primary btn-big" href="/app/new">Start a free interview</a>
+        {% if not user %}<a class="btn btn-big" href="/login">Sign in with Google</a>{% endif %}
+      </div>
+      <ul class="facts">
+        <li>{{ icon('check') }} Free with your own AI</li>
+        <li>{{ icon('check') }} Text, voice or video</li>
+        <li>{{ icon('check') }} Questions from your CV</li>
+        <li>{{ icon('check') }} English and Bangla</li>
+      </ul>
     </div>
-    <p class="hero-note">Free. Works with the AI you already use, including free ones.</p>
-  </div>
 
-  <div class="demo" id="demo" aria-label="Example of a practice question and marked-up answer">
-    <div class="cue">
-      <div class="cue-label"><span id="demo-who-q">Ayesha Rahman, Hiring Manager</span><span id="demo-count">Question 3 of 5</span></div>
-      <p class="cue-q" id="demo-q">Tell me about a time a project you owned went wrong.</p>
+    <div class="hero-visual">
+      <div class="call" id="hero-call" aria-label="Preview of a practice interview">
+        <div class="call-main" id="hero-avatar"></div>
+        <div class="call-bar">
+          <span class="call-badge"><span class="rec live" aria-hidden="true"></span><span id="hero-clock">04:12</span></span>
+          <span class="call-badge" id="hero-count">Question 2 of 5</span>
+        </div>
+        <div class="call-self">{{ icon('person') }}</div>
+        <span class="call-name">Ayesha Rahman, Hiring Manager</span>
+      </div>
+      <div class="call-caption" aria-live="off">
+        <p id="hero-line">You rebuilt the checkout page in React. What made the old one so hard to change?</p>
+      </div>
+      <div class="float-card" id="hero-card">
+        <div class="spread" style="margin-bottom:.45rem"><b>Specifics</b><span class="num">2 / 5</span></div>
+        <div class="bar low"><i style="--v:2"></i></div>
+        <p class="pen" style="margin:.55rem 0 0">Give a number for the result.</p>
+      </div>
     </div>
-    <div class="demo-answer">
-      <div class="demo-who"><span class="rec live" aria-hidden="true"></span> Your answer</div>
-      <p class="demo-text" id="demo-text"><mark class="m-filler on">Um</mark>, so last year our payment page started failing for some users. I <mark class="m-filler on">uh</mark> <mark class="m-strong on">traced it to a timeout we had set too low</mark>, fixed it the same night, and failures dropped <mark class="on">from 4% to under 0.5%</mark>.</p>
-      <p class="demo-margin pen on" id="demo-note">A real number. Now say what you changed so it can't happen again.</p>
-    </div>
-    <script type="application/json" id="demo-scripts">
-      [{"who":"Ayesha Rahman, Hiring Manager","count":"Question 3 of 5","q":"Tell me about a time a project you owned went wrong.","a":[["f","Um"],["",", so last year our payment page started failing for some users. I "],["f","uh"],[""," "],["s","traced it to a timeout we had set too low"],["",", fixed it the same night, and failures dropped "],["h","from 4% to under 0.5%"],["","."]],"note":"A real number. Now say what you changed so it can't happen again."},
-       {"who":"Nusrat Jahan, HR Manager","count":"প্রশ্ন ২ / ৫","q":"আপনার সবচেয়ে বড় দুর্বলতা কী?","a":[["f","আসলে"],[""," আমি একটু "],["w","perfectionist"],["",", "],["f","মানে"],[""," কাজ শেষ করতে মাঝে মাঝে দেরি হয়ে যায়।"]],"note":"খুব চেনা উত্তর। একটা সত্যি উদাহরণ দিন, আর কী বদলাচ্ছেন সেটা বলুন।"}]
-    </script>
+  </div>
+</section>
+
+<section class="works-with" aria-label="Works with">
+  <div class="wrap">
+    <span>Works with</span>
+    <b>OpenAI</b><b>Anthropic</b><b>Google Gemini</b><b>Groq</b><b>OpenRouter</b><b>DeepSeek</b><b>Mistral</b><b>Ollama</b>
   </div>
 </section>
 
 <section class="section" id="how">
   <div class="wrap">
-    <div class="section-head">
-      <h2>Pick the interview you have coming up</h2>
-      <p class="muted">Each type has its own interviewer, its own questions and its own scoring. Most take 15 to 25 minutes.</p>
+    <div class="section-head center">
+      <h2>From your CV to a report you can act on</h2>
+      <p class="muted">Ten to twenty minutes. No scheduling, no stranger on the other side.</p>
     </div>
-    <ul class="index">
-      {% for p in packs %}
-      <li>
-        <h3>{{ p.title }}</h3>
-        <p>{{ p.summary }}</p>
-        <a href="/app/new?pack={{ p.slug }}">Practise this</a>
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="grid-3">
+      <div class="feature">
+        <div class="ic">{{ icon('file') }}</div>
+        <h3>Start from your CV</h3>
+        <p>We read your CV, suggest roles that fit, and list the topics an interviewer will ask about. Pick an internship or a senior role, add the job post, and choose the topics you want.</p>
+      </div>
+      <div class="feature">
+        <div class="ic">{{ icon('video') }}</div>
+        <h3>Talk it through</h3>
+        <p>Your interviewer greets you, asks one question at a time and follows up when an answer is vague. Speak or type, with captions throughout.</p>
+      </div>
+      <div class="feature">
+        <div class="ic">{{ icon('redo') }}</div>
+        <h3>Fix it and say it again</h3>
+        <p>Every answer comes back scored and marked up, with a rewrite that keeps your own story. Redo a single question until it lands.</p>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="section">
-  <div class="wrap split">
-    <div>
-      <h2>Questions about your work, not a generic list</h2>
-      <p>Add your CV and, if you have it, the job post. The interviewer picks out your projects and claims and asks about them the way a real interviewer would: why you chose that approach, what went wrong, how you know it worked.</p>
-      <p>You see every question before you start. Edit them, drop the ones you don't want, or add your own.</p>
-      <p class="muted small">Your CV is read in your browser and sent only to the AI you pick. This site never stores it.</p>
+<section class="section section-mist">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Practise the way you'll be interviewed</h2>
+      <p class="muted">Real interviews happen on video calls, phone screens and written forms. Pick the one you're facing.</p>
     </div>
-    <div class="panel">
-      <p class="faint small" style="margin-bottom:.3rem">What the interviewer noticed</p>
-      <h3 style="margin-bottom:.2rem">Frontend developer, two years</h3>
-      <div class="profile-skills"><span class="tag">React</span><span class="tag">TypeScript</span><span class="tag">REST APIs</span><span class="tag">Figma</span></div>
-      <ol class="plan" style="margin-top:1.2rem">
-        <li><div>Walk me through your background and the kind of work you've done most recently.</div><span class="tag">opener</span></li>
-        <li><div>You rebuilt the checkout page in React. What made the old one so hard to change?</div><span class="tag tag-cv">from your CV</span></li>
-        <li><div>Your CV says page load dropped by 40%. How did you measure that?</div><span class="tag tag-cv">from your CV</span></li>
-        <li><div>The job needs accessibility experience. Tell me about a time you fixed an accessibility problem.</div><span class="tag tag-jd">from the job post</span></li>
-      </ol>
+    <div class="modes">
+      <div class="mode-card"><div class="ic">{{ icon('video') }}</div><b>Video call</b><span>Camera on, speak and listen. The closest thing to the real day.</span></div>
+      <div class="mode-card"><div class="ic">{{ icon('mic') }}</div><b>Voice call</b><span>Like a phone screen. You talk, the interviewer talks back.</span></div>
+      <div class="mode-card"><div class="ic">{{ icon('ear') }}</div><b>Listen and type</b><span>Hear each question, type your answer when you can't speak aloud.</span></div>
+      <div class="mode-card"><div class="ic">{{ icon('keyboard') }}</div><b>Read and speak</b><span>Questions appear as text, you answer out loud.</span></div>
+      <div class="mode-card"><div class="ic">{{ icon('chat') }}</div><b>Text chat</b><span>Read and type. Good for written screening questions.</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="journey">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Or practise the whole hiring process</h2>
+      <p class="muted">Start where real applications start, with the online form, and work through to the final round. Keep the steps you need and skip the rest.</p>
+    </div>
+    <ol class="journey">
+      {% for stage in journey %}<li><b>{{ stage.title }}</b><span>{{ stage.note }}</span></li>{% endfor %}
+    </ol>
+    <p style="margin-top:2rem"><a class="btn" href="/app/new?journey=start">Plan my hiring process</a> <span class="tag tag-pro" style="margin-left:.4rem">Pro</span></p>
+  </div>
+</section>
+
+<section class="section section-mist" id="types">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Interview types</h2>
+      <p class="muted">Each has its own interviewer, its own questions and its own scoring.</p>
+    </div>
+    <form class="search-role" action="/app/new" method="get">
+      <label class="sr-only" for="role-search">Job you're applying for</label>
+      <input id="role-search" type="search" name="role" placeholder="Type the job you're applying for, e.g. Data Analyst intern" maxlength="120">
+      <button class="btn btn-primary" type="submit">Practise</button>
+    </form>
+    <div class="packs" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+      {% for p in packs %}
+      <a class="opt" href="/app/new?pack={{ p.slug }}" style="text-decoration:none;color:inherit">
+        <b>{{ p.title }} <small class="faint" style="font-weight:400">{{ p.minutes }} min</small></b>
+        <span>{{ p.summary }}</span>
+      </a>
+      {% endfor %}
     </div>
   </div>
 </section>
@@ -72,13 +128,16 @@
   <div class="wrap split">
     <div>
       <h2>Your answer, marked up</h2>
-      <p>After each question you get your own words back with marks on them. Green is worth keeping. Pink weakened the answer. A wavy red line is a filler word.</p>
-      <p>Every answer is scored on five points for that interview type, with the two things that matter most and a rewrite of your story that keeps your facts.</p>
-      <p>Then say it again. In practice mode you can redo a single question until it lands.</p>
+      <p class="muted">After each question you get your own words back with marks on them. Green is worth keeping. Pink weakened the answer. A wavy red line is a filler word.</p>
+      <p class="muted">Each answer is scored on five points for that interview type, with the two things that matter most and a rewrite of your story that keeps your facts.</p>
+      <div class="legend" style="margin-top:1.2rem"><span><mark class="m-strong">worth keeping</mark></span><span><mark class="m-weak">weakened the answer</mark></span><span><mark class="m-filler">filler</mark></span></div>
     </div>
-    <div class="panel">
-      <div class="legend" style="margin-bottom:.8rem"><span><mark class="m-strong">strong</mark></span><span><mark class="m-weak">weak</mark></span><span><mark class="m-filler">filler</mark></span></div>
-      <p>“We had a lot of issues with the release, <mark class="m-weak">and the team kind of fixed it</mark>. <mark class="m-strong">I wrote the rollback script that night</mark> and we were back up in <mark>twenty minutes</mark>.”</p>
+    <div class="panel" style="padding:1.6rem">
+      <div class="cue" style="margin-bottom:1.1rem">
+        <div class="cue-label"><span>Question 3</span><span>From your CV</span></div>
+        <p class="cue-q">Tell me about a release that went wrong.</p>
+      </div>
+      <p class="sample">“<mark class="m-filler">Um</mark>, we had a lot of issues with the release, <mark class="m-weak">and the team kind of fixed it</mark>. <mark class="m-strong">I wrote the rollback script that night</mark> and we were back up in <mark>twenty minutes</mark>.”</p>
       <p class="pen">Who is “the team”? Say what you did first.</p>
       <div class="rubric" style="margin-top:1rem">
         <span>Structure</span><div class="bar"><i style="--v:3"></i></div><span class="num">3</span>
@@ -89,61 +148,58 @@
   </div>
 </section>
 
-<section class="section">
+<section class="section section-mist">
   <div class="wrap">
     <div class="section-head">
-      <h2>Use the AI you already have</h2>
-      <p class="muted">The interviewer runs on your AI account. Your key stays in your browser and goes straight to the provider; this site never stores it.</p>
+      <h2>Your AI, your data</h2>
+      <p class="muted">The interviewer runs on an AI account you connect. That is why practice can be free.</p>
     </div>
-    <div class="ways">
-      <div>
-        <h3>Sign in with an account</h3>
-        <ul>
-          <li>OpenRouter: one login for GPT, Claude, Gemini, Llama and free models</li>
-          <li>Puter: a free account, no key needed</li>
-          <li>ChatGPT Plus or Pro, once OpenAI opens sign-in to this site</li>
-        </ul>
-      </div>
-      <div>
-        <h3>Paste an API key</h3>
-        <ul>
-          <li>Google Gemini and Groq give free keys in about a minute</li>
-          <li>OpenAI, Anthropic, DeepSeek, Mistral, xAI</li>
-          <li>Any OpenAI-compatible server</li>
-        </ul>
-      </div>
-      <div>
-        <h3>Run it on your computer</h3>
-        <ul>
-          <li>Ollama or LM Studio</li>
-          <li>The conversation never leaves your machine; only the report you save does</li>
-        </ul>
-      </div>
+    <div class="grid-3">
+      <div class="feature"><div class="ic">{{ icon('key') }}</div><h3>Sign in or paste a key</h3><p>Sign in with OpenRouter or Puter, paste a free Google Gemini or Groq key, or use OpenAI, Anthropic and others.</p></div>
+      <div class="feature"><div class="ic">{{ icon('lock') }}</div><h3>Keys stay in your browser</h3><p>Your key goes straight from your browser to the provider. This site never stores it, and never sees your CV.</p></div>
+      <div class="feature"><div class="ic">{{ icon('mark') }}</div><h3>Practice, not cheating</h3><p>No live copilot that whispers answers in a real interview. The point is to get good enough that you don't need one.</p></div>
     </div>
   </div>
 </section>
 
 <section class="section">
-  <div class="wrap split">
-    <div>
-      <h2>Made for practice, not for feeding you answers in the real one</h2>
-    </div>
-    <div>
-      <p>Plenty of tools now sell live copilots that whisper answers during a real interview. This isn't one of them. The point is to practise until you don't need one.</p>
-      <p class="muted">The code is open source, so you can read exactly what it sends to the AI and run it yourself.</p>
+  <div class="wrap">
+    <div class="section-head center"><h2>Simple pricing</h2><p class="muted">Practise as much as you like for free. Pro adds the full hiring process.</p></div>
+    <div class="plans" style="margin-inline:auto">
+      <div class="plan-card">
+        <h3>Free</h3>
+        <div class="price">0 <small>forever</small></div>
+        <ul><li>Unlimited interviews of every type</li><li>Questions from your CV and job post</li><li>Text, voice and video modes</li><li>Marked-up feedback and redo</li></ul>
+        <a class="btn btn-block" href="/app/new">Start practising</a>
+      </div>
+      <div class="plan-card featured">
+        <h3>Pro</h3>
+        <div class="price">{{ '%g' % billing.price_usdt }} USDT <small>for {{ billing.days }} days</small></div>
+        <ul><li>Everything in Free</li><li>The whole hiring process, step by step</li><li>Support the project</li></ul>
+        <a class="btn btn-primary btn-block" href="/pricing">See Pro</a>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section section-mist">
   <div class="narrow faq">
     <h2>Questions</h2>
-    <details><summary>Is it free?</summary><p>Yes. Interviews run on your own AI account, so practising costs this site almost nothing, and the core practice will stay free. A free key from Google Gemini or Groq is enough for daily practice.</p></details>
+    <details><summary>Is it really free?</summary><p>Yes. Interviews run on your own AI account, so practising costs this site almost nothing. A free key from Google Gemini or Groq is enough for daily practice.</p></details>
     <details><summary>Do I need an API key?</summary><p>No. You can sign in with an OpenRouter or Puter account instead, or run a model on your own computer with Ollama.</p></details>
-    <details><summary>Can I speak my answers?</summary><p>Yes. In Chrome or Edge you talk and the interviewer talks back, with live captions. You can always type instead.</p></details>
-    <details><summary>Does it work in Bangla?</summary><p>Yes. Choose Bangla, or Bangla mixed with English, when you set up the interview. Spoken Bangla works best in Chrome.</p></details>
-    <details><summary>Where does my CV go?</summary><p>It's read in your browser and sent only to the AI provider you picked, as part of the prompt. It isn't uploaded to or stored on this site.</p></details>
-    <details><summary>Who can see my answers?</summary><p>You. Reports are saved to your account so you can track progress. You can switch off transcript saving, export everything or delete your account in Settings. The site owner sees counts and scores, not what you said.</p></details>
+    <details><summary>Can I do it with my camera on?</summary><p>Yes. Video call mode shows your camera next to the interviewer, like a real call. The video never leaves your device.</p></details>
+    <details><summary>Does it work in Bangla?</summary><p>Yes. Choose Bangla, or Bangla mixed with English, when you set up the interview. Spoken Bangla works best in Chrome and Edge.</p></details>
+    <details><summary>Where does my CV go?</summary><p>It's read in your browser and sent only to the AI provider you picked, as part of the prompt. It is never uploaded to this site.</p></details>
+    <details><summary>Who can see my answers?</summary><p>You. Reports are saved to your account so you can track progress. You can switch off transcript saving, export everything or delete your account in Settings.</p></details>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="cta-band">
+      <div><h2>Your next interview is closer than it feels.</h2><p>Ten minutes now beats a sleepless night later.</p></div>
+      <a class="btn btn-big" href="/app/new">Start a free interview</a>
+    </div>
   </div>
 </section>
 {% endblock %}

@@ -3,40 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}{{ app_name }} — rehearse your interview out loud{% endblock %}</title>
-<meta name="description" content="{% block description %}Practise job interviews out loud with an interviewer that reads your CV, asks follow-ups and marks up your answers. Works with the AI you already use.{% endblock %}">
+<title>{% block title %}{{ app_name }}: practise job interviews out loud{% endblock %}</title>
+<meta name="description" content="{% block description %}Practise job interviews with an AI interviewer that reads your CV, asks follow-up questions and marks up your answers. Text, voice or video. Works with the AI you already use.{% endblock %}">
 <meta name="csrf" content="{{ csrf }}">
 <meta name="application-name" content="{{ app_name }}">
-<meta name="theme-color" content="#f3f5f9">
+<meta name="theme-color" content="#ffffff">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anek+Bangla:wdth,wght@75..125,300..700&family=Archivo:wdth,wght@62..125,300..800&family=Caveat:wght@500..700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400..800&family=Caveat:wght@600&display=swap">
 <link rel="stylesheet" href="/static/style.css?v={{ v }}">
 <link rel="icon" href="/static/img/icon.svg" type="image/svg+xml">
 {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
+{% set flags = site() %}
 {% block header %}
-{% if flags and flags.announcement %}<div class="announce">{{ flags.announcement }}</div>{% endif %}
+{% if flags.announcement %}<div class="announce">{{ flags.announcement }}</div>{% endif %}
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="{{ '/app' if user else '/' }}">{{ app_name }}{% if app_name == 'Mohora' %} <small lang="bn">মহড়া</small>{% endif %}</a>
+    <a class="brand" href="{{ '/app' if user else '/' }}">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#141b3d"/><rect x="7" y="8.5" width="18" height="13" rx="2.5" fill="#fff"/><path d="M8 12.5h16" stroke="#ef8a94" stroke-width="1.3"/><path d="M10 17.5h8" stroke="#ffe45e" stroke-width="3.4" stroke-linecap="round"/><path d="M10.5 17.5h7" stroke="#141b3d" stroke-width="1.4" stroke-linecap="round"/><path d="M12 21.5l-1 3.5 4-3.5" fill="#fff"/></svg>
+      {{ app_name }}
+    </a>
     <nav class="nav" aria-label="Main">
       {% if user %}
         <a href="/app" {% if nav == 'home' %}aria-current="page"{% endif %}>Practice</a>
         <a href="/app/new" {% if nav == 'new' %}aria-current="page"{% endif %}>New interview</a>
         <a class="hide-sm" href="/app/settings" {% if nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
         {% if user.is_admin %}<a class="hide-sm" href="/admin" {% if nav == 'admin' %}aria-current="page"{% endif %}>Admin</a>{% endif %}
+      {% else %}
+        <a class="hide-sm" href="/#how">How it works</a>
+        <a class="hide-sm" href="/#types">Interview types</a>
+        <a href="/pricing" {% if nav == 'pricing' %}aria-current="page"{% endif %}>Pricing</a>
+      {% endif %}
+    </nav>
+    <div class="nav-end">
+      {% if user %}
+        {% if user.has_pass %}<span class="pill" title="Pro until {{ user.pass_until | short_date }}">Pro</span>
+        {% else %}<a class="btn btn-small hide-sm" href="/pricing">Get Pro</a>{% endif %}
+        {% if user.avatar_url %}<img class="avatar-chip hide-sm" src="{{ user.avatar_url }}" alt="" referrerpolicy="no-referrer">{% endif %}
         <form method="post" action="/auth/logout">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <button class="btn btn-quiet btn-small" type="submit">Sign out</button>
         </form>
       {% else %}
-        <a class="hide-sm" href="/#how">How it works</a>
-        <a class="hide-sm" href="{{ repo_url }}">Source code</a>
-        <a href="/login">Sign in</a>
+        <a class="btn btn-quiet btn-small hide-sm" href="/login">Sign in</a>
+        <a class="btn btn-primary btn-small" href="/app/new">Start practising</a>
       {% endif %}
-    </nav>
+    </div>
   </div>
 </header>
 {% endblock %}
@@ -44,13 +58,31 @@
 {% block footer %}
 <footer class="foot">
   <div class="wrap">
-    <span>© 2026 Tayb Hassan Shizan. Open source under the MIT licence.</span>
-    <nav aria-label="Footer">
-      <a href="/privacy">Privacy</a>
-      <a href="/terms">Terms</a>
-      <a href="{{ repo_url }}">Source code</a>
-      <a href="{{ repo_url }}/issues">Report a problem</a>
-    </nav>
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="/">{{ app_name }}</a>
+        <p style="margin-top:.7rem;max-width:30ch">Interview practice with an AI interviewer that listens, follows up and tells you exactly what to fix.</p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul><li><a href="/#how">How it works</a></li><li><a href="/#types">Interview types</a></li><li><a href="/#journey">Hiring process</a></li><li><a href="/pricing">Pricing</a></li></ul>
+      </div>
+      <div>
+        <h4>Your account</h4>
+        <ul>
+          {% if user %}<li><a href="/app">Practice</a></li><li><a href="/app/settings">Settings</a></li>
+          {% else %}<li><a href="/login">Sign in</a></li><li><a href="/app/new">Try without an account</a></li>{% endif %}
+        </ul>
+      </div>
+      <div>
+        <h4>Company</h4>
+        <ul>
+          <li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li>
+          {% if flags.contact_email %}<li><a href="mailto:{{ flags.contact_email }}">Contact</a></li>{% endif %}
+        </ul>
+      </div>
+    </div>
+    <div class="foot-base">© 2026 {{ app_name }}. Made by Tayb Hassan Shizan.</div>
   </div>
 </footer>
 {% endblock %}

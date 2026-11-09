@@ -20,9 +20,9 @@ os.environ.update({
 import pytest
 from fastapi.testclient import TestClient
 
-from app import notify
+from app import billing, notify
 from app.admin import validate_pack
-from app.db import InterviewSession, SessionLocal, User
+from app.db import InterviewSession, Payment, SessionLocal, User, set_setting
 from app.main import app
 from app.web import mark_answer
 
@@ -56,7 +56,7 @@ def csrf(client: TestClient, path: str = "/") -> str:
 
 
 def sign_in(client: TestClient, email: str) -> str:
-    token = csrf(client, "/auth/dev")
+    token = csrf(client, "/login")
     res = client.post("/auth/dev", data={"email": email, "name": "Test Person", "csrf": token}, follow_redirects=False)
     assert res.status_code == 303
     return csrf(client, "/")
@@ -78,7 +78,7 @@ def test_app_needs_sign_in(client):
 
 
 def test_first_sign_in_goes_to_onboarding(client):
-    token = csrf(client, "/auth/dev")
+    token = csrf(client, "/login")
     res = client.post("/auth/dev", data={"email": "new@example.com", "csrf": token}, follow_redirects=False)
     assert res.headers["location"] == "/onboarding"
     assert client.get("/app").status_code == 200
@@ -147,7 +147,7 @@ def test_admin_pages(client):
     assert client.get("/admin").status_code == 404
     with TestClient(app) as owner:
         sign_in(owner, "owner@example.com")
-        for path in ("/admin", "/admin/users", "/admin/packs", "/admin/packs/behavioral-star", "/admin/settings", "/admin/inbox"):
+        for path in ("/admin", "/admin/users", "/admin/packs", "/admin/packs/behavioral-star", "/admin/settings", "/admin/inbox", "/admin/payments"):
             assert owner.get(path).status_code == 200, path
 
 
@@ -180,3 +180,74 @@ def test_telegram_messages_escape_html():
     assert "&lt;Rahim&gt;" in text
     assert "BD, Chrome on Android, via linkedin" in text
     assert "9 Nov 2026, 21:14" in text  # Asia/Dhaka is UTC+6
+
+
+TRC20_WALLET = "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE"
+
+
+def use_wallet():
+    with SessionLocal() as db:
+        set_setting(db, "billing", {"trc20_address": TRC20_WALLET, "bep20_address": "", "price_usdt": 1, "days": 30})
+
+
+def fake_transfers(monkeypatch, value: str, tx: str):
+    async def transfers(address):
+        return [{"transaction_id": tx, "to": address, "value": value,
+                 "token_info": {"address": billing.USDT_TRC20, "decimals": 6}}]
+    monkeypatch.setattr(billing, "fetch_trc20_transfers", transfers)
+
+
+def test_pricing_and_pay_pages(client):
+    use_wallet()
+    assert "1 USDT" in client.get("/pricing").text
+    assert client.get("/pay", follow_redirects=False).status_code == 303
+    sign_in(client, "viewer@example.com")
+    page = client.get("/pay").text
+    assert TRC20_WALLET in page and "<svg" in page
+
+
+def test_trc20_payment_turns_pro_on(client, monkeypatch):
+    use_wallet()
+    tx = "ab" * 32
+    fake_transfers(monkeypatch, "1000000", tx)
+    token = sign_in(client, "payer@example.com")
+    res = client.post("/api/payments", json={"network": "trc20", "tx_id": tx}, headers={"X-CSRF-Token": token})
+    assert res.json()["status"] == "approved"
+    with SessionLocal() as db:
+        assert db.query(User).filter_by(email="payer@example.com").one().has_pass
+    again = client.post("/api/payments", json={"network": "trc20", "tx_id": tx}, headers={"X-CSRF-Token": token})
+    assert again.status_code == 409
+
+
+def test_bad_payments_are_refused(client, monkeypatch):
+    use_wallet()
+    token = sign_in(client, "cheap@example.com")
+    headers = {"X-CSRF-Token": token}
+    assert client.post("/api/payments", json={"network": "trc20", "tx_id": "nope"}, headers=headers).status_code == 400
+    fake_transfers(monkeypatch, "500000", "cd" * 32)
+    assert client.post("/api/payments", json={"network": "trc20", "tx_id": "cd" * 32}, headers=headers).status_code == 400
+    fake_transfers(monkeypatch, "1000000", "ef" * 32)
+    res = client.post("/api/payments", json={"network": "trc20", "tx_id": "12" * 32}, headers=headers)
+    assert res.json()["status"] == "pending"
+
+
+def test_admin_approves_a_pending_payment(client, monkeypatch):
+    use_wallet()
+    fake_transfers(monkeypatch, "1000000", "00" * 32)
+    token = sign_in(client, "manual@example.com")
+    client.post("/api/payments", json={"network": "trc20", "tx_id": "34" * 32}, headers={"X-CSRF-Token": token})
+    with SessionLocal() as db:
+        pid = db.query(Payment).filter_by(tx_id="34" * 32).one().id
+    with TestClient(app) as owner:
+        sign_in(owner, "owner@example.com")
+        res = owner.post(f"/admin/payments/{pid}", data={"action": "approve", "csrf": csrf(owner, "/admin/payments")},
+                         follow_redirects=False)
+        assert res.status_code == 303
+    with SessionLocal() as db:
+        assert db.query(User).filter_by(email="manual@example.com").one().has_pass
+
+
+def test_hiring_journey_needs_pro(client):
+    token = sign_in(client, "journey@example.com")
+    body = {"pack": "recruiter-screen", "config": {"journey": {"id": "j1", "stages": ["recruiter-screen"], "index": 0}}}
+    assert client.post("/api/sessions", json=body, headers={"X-CSRF-Token": token}).status_code == 403

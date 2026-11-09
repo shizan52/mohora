@@ -15,8 +15,24 @@
 
   <section>
     <h2>Voice</h2>
-    <p class="muted">These use your browser's built-in voices and speech recognition. Chrome and Edge have the best ones.</p>
+    <p class="muted">Pick how the interviewer sounds. Microphone input uses your browser's speech recognition, which works best in Chrome and Edge.</p>
     <form id="voice-form" class="stack">
+      <div class="field">
+        <label for="engine">Interviewer voice</label>
+        <select id="engine" name="engine">
+          <option value="auto">Automatic: the most natural voice available</option>
+          <option value="natural">Natural voice that runs in this browser (English)</option>
+          <option value="openai">OpenAI voice, through your OpenAI key (any language)</option>
+          <option value="browser">Browser voice</option>
+        </select>
+        <p class="hint">Edge has natural voices built in. In other browsers, download the natural voice below or use an OpenAI key.</p>
+      </div>
+      <div class="panel panel-mist panel-tight">
+        <div class="spread">
+          <div><b>Natural voice</b> <span class="small muted">About 90 MB, downloaded once and kept by your browser.</span><div class="small" id="natural-status" role="status"></div></div>
+          <button class="btn btn-small" id="natural-load" type="button">Download and test</button>
+        </div>
+      </div>
       <div class="grid-2">
         <div><label for="voice-en">English voice</label><select id="voice-en" name="voice_en"></select></div>
         <div><label for="voice-bn">Bangla voice</label><select id="voice-bn" name="voice_bn"></select></div>

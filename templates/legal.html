@@ -26,13 +26,15 @@
     <li>The site owner can see your account details, how many interviews you've done and your scores. The admin panel does not show transcripts.</li>
     <li>Your AI provider receives the interview conversation, your CV if you added one, and the prompts. Their own privacy policy applies to that.</li>
     <li>Nothing is sold or shared with advertisers. There are no third-party trackers. Fonts are loaded from Google Fonts.</li>
+    <li>If you pay for Pro, we keep the transaction ID, network and amount. Your wallet address is public on the blockchain anyway; we don't store anything else about it.</li>
+    <li>Video call mode uses your camera only on your device. The video is never recorded or uploaded.</li>
   </ul>
 
   <h2>Your controls</h2>
   <p>In Settings you can turn off transcript saving, download everything as a JSON file, or delete your account and all of its interviews permanently.</p>
 
   <h2>Contact</h2>
-  <p>Open an issue on <a href="{{ repo_url }}/issues">the project's GitHub page</a>.</p>
+  <p>{% if site().contact_email %}Write to <a href="mailto:{{ site().contact_email }}">{{ site().contact_email }}</a>.{% else %}Use the feedback form on your practice page.{% endif %}</p>
 {% else %}
   <h1>Terms</h1>
   <p class="muted">Last updated 9 November 2026.</p>
@@ -51,7 +53,7 @@
   </ul>
 
   <h2>No warranty</h2>
-  <p>The service is provided as it is, without guarantees of availability or accuracy. The source code is available under the MIT licence.</p>
+  <p>The service is provided as it is, without guarantees of availability or accuracy.</p>
 {% endif %}
 </article>
 {% endblock %}

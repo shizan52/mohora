@@ -31,7 +31,6 @@ class Config:
     telegram_webhook_secret: str
     db_path: Path
     tz: str
-    repo_url: str
 
     @property
     def google_enabled(self) -> bool:
@@ -71,7 +70,6 @@ def load() -> Config:
         telegram_webhook_secret=env("TELEGRAM_WEBHOOK_SECRET", ""),
         db_path=db_path,
         tz=env("TZ", "Asia/Dhaka"),
-        repo_url=env("REPO_URL", "https://github.com/shizan52/mohora"),
     )
 
 

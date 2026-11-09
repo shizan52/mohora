@@ -1,6 +1,8 @@
 // Shared browser code: AI connections, model calls, and small page helpers.
 // Keys live in this browser only. Calls go straight from here to the provider.
 
+import * as voice from './voice.js';
+
 const STORE = 'mohora.ai';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -586,45 +588,103 @@ export function openAIDialog() {
 
 // ------------------------------------------------------------------ pages
 
-async function landingDemo() {
-  const root = $('#demo');
-  const scripts = JSON.parse($('#demo-scripts').textContent);
+// The landing page call: the real avatar asks questions from a script.
+async function heroCall() {
+  const { Avatar } = await import('./avatar.js');
+  const avatar = new Avatar($('#hero-avatar'), 'ayesha', { mood: 'friendly' });
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const classes = { f: 'm-filler', s: 'm-strong', w: 'm-weak', h: '' };
-  let turn = 0;
-  await sleep(4500);
-  for (;;) {
-    const s = scripts[turn++ % scripts.length];
-    const bangla = /[ঀ-৿]/.test(s.q);
-    root.lang = bangla ? 'bn' : 'en';
-    $('#demo-who-q').textContent = s.who;
-    $('#demo-count').textContent = s.count;
-    $('#demo-q').textContent = s.q;
-    const text = $('#demo-text');
-    const note = $('#demo-note');
-    note.classList.remove('on');
-    text.replaceChildren();
-    const marks = [];
-    for (const [kind, words] of s.a) {
-      const target = kind ? el('mark', { class: classes[kind] }) : text;
-      if (kind) {
-        text.append(target);
-        marks.push(target);
-      }
-      for (const piece of words.split(/(\s+)/)) {
-        target.append(piece);
-        if (piece.trim()) await sleep(95);
-      }
+  const script = [
+    ['Question 2 of 5', 'You rebuilt the checkout page in React. What made the old one so hard to change?'],
+    ['Follow-up', 'And how did you know the new version was actually faster?'],
+    ['Question 3 of 5', 'Tell me about a time you disagreed with your team lead. What happened?'],
+  ];
+  let seconds = 252;
+  setInterval(() => {
+    seconds += 1;
+    $('#hero-clock').textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  }, 1000);
+  const card = $('#hero-card');
+  card.style.transition = 'opacity .5s';
+  for (let turn = 0; ; turn++) {
+    const [count, line] = script[turn % script.length];
+    $('#hero-count').textContent = count;
+    const target = $('#hero-line');
+    target.textContent = '';
+    card.style.opacity = '0';
+    avatar.react(count === 'Follow-up' ? 'curious' : 'nod');
+    avatar.setState('speaking');
+    const mouth = setInterval(() => avatar.setLevel(0.25 + Math.abs(Math.sin(performance.now() / 95)) * 0.55), 60);
+    for (const word of line.split(' ')) {
+      target.textContent += `${target.textContent ? ' ' : ''}${word}`;
+      await sleep(210);
     }
-    await sleep(600);
-    for (const m of marks) {
-      m.classList.add('on');
-      await sleep(380);
+    clearInterval(mouth);
+    avatar.setState('listening');
+    avatar.setHeard(0.4);
+    await sleep(2600);
+    card.style.opacity = '1';
+    avatar.setHeard(0);
+    await sleep(3400);
+  }
+}
+
+async function loginAvatars() {
+  const { Avatar } = await import('./avatar.js');
+  const box = $('[data-avatars]');
+  for (const id of ['ayesha', 'tanvir']) {
+    const host = el('div', { class: 'avatar-host' });
+    box.append(host);
+    new Avatar(host, id, { mood: 'friendly' }).react('smile', 4000);
+  }
+}
+
+function payPage() {
+  for (const button of $$('[data-copy]')) {
+    button.addEventListener('click', async () => {
+      const input = $(button.dataset.copy);
+      try {
+        await navigator.clipboard.writeText(input.value);
+        toast('Copied.');
+      } catch {
+        input.select();
+      }
+    });
+  }
+  const form = $('#pay-form');
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = $('#pay-result');
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      const res = await api('/api/payments', { method: 'POST', body: { network: form.dataset.network, tx_id: form.elements.tx_id.value } });
+      result.className = res.status === 'approved' ? 'ok-box' : 'note';
+      result.textContent = res.message;
+      result.hidden = false;
+      setTimeout(() => (res.status === 'approved' ? location.assign('/app') : location.reload()), 3000);
+    } catch (err) {
+      result.className = 'error-box';
+      result.textContent = err.message;
+      result.hidden = false;
+      button.disabled = false;
     }
-    await sleep(400);
-    note.textContent = s.note;
-    note.classList.add('on');
-    await sleep(6000);
+  });
+  for (const button of $$('[data-recheck]')) {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const res = await api(`/api/payments/${button.dataset.recheck}/recheck`, { method: 'POST' });
+        if (res.status === 'approved') {
+          toast('Payment confirmed. Pro is on.');
+          location.reload();
+        } else {
+          toast("It isn't on the blockchain yet. Try again in a minute.");
+        }
+      } catch (err) {
+        toast(err.message, true);
+      }
+      button.disabled = false;
+    });
   }
 }
 
@@ -645,38 +705,56 @@ function settingsPage() {
   mountConnections($('#connections'));
 
   const voiceForm = $('#voice-form');
-  const saved = JSON.parse(localStorage.getItem('mohora.voice') || '{}');
+  const saved = voice.voiceSettings();
   const fillVoices = () => {
     const voices = window.speechSynthesis?.getVoices() || [];
     for (const [lang, select] of [['en', $('#voice-en')], ['bn', $('#voice-bn')]]) {
       const options = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
-      select.replaceChildren(el('option', { value: '' }, 'Pick automatically'), ...options.map((v) => el('option', { value: v.name, selected: saved[`voice_${lang}`] === v.name }, `${v.name} (${v.lang})`)));
-      if (!options.length) select.append(el('option', { value: '', disabled: true }, lang === 'bn' ? 'No Bangla voice on this device' : 'No English voice found'));
+      select.replaceChildren(el('option', { value: '' }, 'Pick the best one automatically'),
+        ...options.map((v) => el('option', { value: v.name, selected: saved[`voice_${lang}`] === v.name }, `${v.name} (${v.lang})`)));
+      if (!options.length) select.append(el('option', { value: '', disabled: true }, lang === 'bn' ? 'No Bangla voice in this browser' : 'No English voice found'));
     }
   };
   fillVoices();
   window.speechSynthesis?.addEventListener('voiceschanged', fillVoices);
-  for (const [name, value] of Object.entries(saved)) {
-    const input = voiceForm.elements[name];
-    if (input && input.type === 'checkbox') input.checked = !!value;
-    else if (input && input.tagName !== 'SELECT') input.value = value;
-  }
+  voiceForm.elements.engine.value = saved.engine;
+  voiceForm.elements.rate.value = saved.rate;
+  voiceForm.elements.silence.value = saved.silence;
+  voiceForm.elements.auto_listen.checked = saved.auto_listen !== false;
+  const drawNatural = () => {
+    const speed = voice.naturalSpeed();
+    $('#natural-status').textContent = voice.naturalReady()
+      ? `Downloaded and fast enough on this device (${speed.toFixed(1)}× real time).`
+      : speed ? `Downloaded, but too slow on this device (${speed.toFixed(1)}× real time), so the browser voice is used.` : 'Not downloaded yet.';
+  };
+  drawNatural();
   voiceForm.addEventListener('change', () => {
     const data = {
-      voice_en: $('#voice-en').value, voice_bn: $('#voice-bn').value,
+      engine: voiceForm.elements.engine.value, voice_en: $('#voice-en').value, voice_bn: $('#voice-bn').value,
       rate: Number(voiceForm.elements.rate.value), silence: Number(voiceForm.elements.silence.value),
       auto_listen: voiceForm.elements.auto_listen.checked,
     };
     localStorage.setItem('mohora.voice', JSON.stringify(data));
     toast('Voice settings saved.');
   });
-  $('#voice-test').addEventListener('click', () => {
-    const u = new SpeechSynthesisUtterance('Thanks for coming in today. Shall we start?');
-    const voice = speechSynthesis.getVoices().find((v) => v.name === $('#voice-en').value);
-    if (voice) u.voice = voice;
-    u.rate = Number(voiceForm.elements.rate.value) || 1;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(u);
+  $('#natural-load').addEventListener('click', async (e) => {
+    const button = e.currentTarget;
+    button.disabled = true;
+    const status = $('#natural-status');
+    try {
+      await voice.loadNaturalVoice((pct) => (status.textContent = `Downloading… ${Math.round(pct)}%`));
+      drawNatural();
+    } catch (err) {
+      status.textContent = err.message;
+    }
+    button.disabled = false;
+  });
+  $('#voice-test').addEventListener('click', async () => {
+    await voice.voicesReady();
+    const speaker = new voice.Speaker({ lang: 'en', gender: 'female', settings: voice.voiceSettings() });
+    speaker.unlock();
+    toast(`Playing the ${speaker.label}.`);
+    speaker.say('Thanks for coming in today. Shall we start with a little about you?');
   });
 
   $('#save-transcripts').addEventListener('change', async (e) => {
@@ -723,7 +801,9 @@ function feedbackForm() {
   });
 }
 
-if ($('#demo-scripts')) landingDemo();
+if ($('#hero-avatar')) heroCall();
+if ($('[data-avatars]')) loginAvatars();
+if ($('#pay-form') || $('[data-recheck]')) payPage();
 if ($('#connect-status')) finishOpenRouter();
 if ($('#ai-status')) dashboardStatus();
 if ($('#connections')) settingsPage();

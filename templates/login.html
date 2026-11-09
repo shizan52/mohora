@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "ui.html" import icon %}
+{% block title %}Sign in to {{ app_name }}{% endblock %}
+{% block header %}{% endblock %}
+{% block footer %}{% endblock %}
+{% block main %}
+<div class="auth">
+  <aside class="auth-side">
+    <a class="brand" href="/">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#ffffff"/><rect x="7" y="8.5" width="18" height="13" rx="2.5" fill="#141b3d"/><path d="M8 12.5h16" stroke="#ef8a94" stroke-width="1.3"/><path d="M10 17.5h8" stroke="#ffe45e" stroke-width="3.4" stroke-linecap="round"/><path d="M12 21.5l-1 3.5 4-3.5" fill="#141b3d"/></svg>
+      {{ app_name }}
+    </a>
+    <div>
+      <div class="auth-avatars" data-avatars></div>
+      <h2 style="margin-top:1.6rem">Practise with interviewers who listen.</h2>
+      <ul>
+        <li>{{ icon('check') }} Questions built from your own CV</li>
+        <li>{{ icon('check') }} Follow-ups on what you actually said</li>
+        <li>{{ icon('check') }} Every answer marked up, with a rewrite</li>
+        <li>{{ icon('check') }} Video, voice or text, whenever you like</li>
+      </ul>
+    </div>
+    <p class="small" style="color:#a9b1d6;margin:0">Your reports and progress are saved to your account. Your AI keys and CV never leave your browser.</p>
+  </aside>
+
+  <section class="auth-main">
+    <div class="auth-card">
+      <h1>Sign in</h1>
+      <p class="muted">New here? Signing in with Google creates your account.</p>
+      {% if error %}<p class="error-box" role="alert">{{ error }}</p>{% endif %}
+
+      {% if google %}
+      <a class="btn google-btn" href="/auth/login?next={{ next | urlencode }}">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        Continue with Google
+      </a>
+      {% endif %}
+
+      {% if dev_login %}
+      {% if google %}<div class="divider">or, on this development server</div>{% endif %}
+      <p class="note small">Google sign-in isn't set up on this server, so you can sign in with any email for testing. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env to switch to Google.</p>
+      <form method="post" action="/auth/dev" class="stack" style="--gap:.9rem;margin-top:1rem">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div><label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="email"></div>
+        <div><label for="name">Name</label><input id="name" name="name" type="text" autocomplete="name"></div>
+        <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      </form>
+      {% elif not google %}
+      <p class="error-box">Sign-in isn't set up on this server yet.</p>
+      {% endif %}
+
+      <div class="divider">or</div>
+      <a class="btn btn-block" href="/app/new">Try an interview without an account</a>
+      <p class="small faint" style="margin-top:1.4rem">By continuing you agree to the <a href="/terms">terms</a> and the <a href="/privacy">privacy notice</a>.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}

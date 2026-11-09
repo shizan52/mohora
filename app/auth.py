@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from . import notify
 from .config import config
 from .db import InterviewSession, User, get_db, log_event, site_flags, utcnow
-from .web import check_csrf, render
+from .web import check_csrf
 
 router = APIRouter()
 oauth = OAuth()
@@ -157,7 +157,7 @@ async def login(request: Request, next: str = "/app"):
     if config.google_enabled:
         return await oauth.google.authorize_redirect(request, f"{config.base_url}/auth/callback")
     if config.dev_login:
-        return RedirectResponse("/auth/dev", 303)
+        return RedirectResponse(f"/login?next={safe_next(next)}", 303)
     raise HTTPException(503, "Sign-in isn't set up on this server yet.")
 
 
@@ -181,25 +181,20 @@ async def google_callback(
     )
 
 
-@router.get("/auth/dev")
-def dev_login_page(request: Request):
-    if not config.dev_login:
-        raise HTTPException(404)
-    return render(request, "simple.html", kind="dev-login")
-
-
 @router.post("/auth/dev", dependencies=[Depends(check_csrf)])
 def dev_login(
     request: Request,
     background: BackgroundTasks,
     email: str = Form(...),
     name: str = Form(""),
+    next: str = Form("/app"),
     db: Session = Depends(get_db),
 ):
     if not config.dev_login:
         raise HTTPException(404)
     if "@" not in email:
-        return render(request, "simple.html", status=400, kind="dev-login", error="Enter an email address.")
+        return RedirectResponse("/login?error=dev-email", 303)
+    request.session["next"] = safe_next(next)
     return sign_in(request, db, background, email=email, name=name.strip())
 
 

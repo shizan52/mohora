@@ -12,5 +12,9 @@ line-length = 120
 # FastAPI declares dependencies as default arguments.
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Form", "fastapi.Query"]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

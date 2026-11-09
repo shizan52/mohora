@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Interview in progress — {{ app_name }}{% endblock %}
-{% block head %}{% if user %}<meta name="signed-in" content="1">{% endif %}<meta name="theme-color" content="#121a3f">{% endblock %}
+{% block head %}{% if user %}<meta name="signed-in" content="1">{% endif %}<meta name="theme-color" content="#10173a">{% endblock %}
 {% block body_class %}room{% endblock %}
 {% block header %}{% endblock %}
 {% block footer %}{% endblock %}
@@ -25,8 +25,7 @@
   <section class="stage" aria-label="Interview">
     <div class="tiles">
       <div class="tile" id="tile-ai">
-        <span class="ring" aria-hidden="true"></span>
-        <div class="monogram" id="ai-mono" aria-hidden="true"></div>
+        <div class="avatar-host" id="ai-avatar"></div>
         <span class="tile-state" id="ai-state"></span>
         <span class="tile-name" id="ai-name"></span>
       </div>
@@ -67,13 +66,14 @@
 
 <div class="overlay" id="lobby">
   <div class="sheet lobby">
-    <div class="who-card">
-      <div class="monogram" id="lobby-mono" aria-hidden="true"></div>
+    <div class="lobby-head">
+      <div class="avatar-host" id="lobby-avatar"></div>
       <div><b id="lobby-name"></b><div class="muted small" id="lobby-role"></div></div>
     </div>
     <h2 id="lobby-title" style="margin:0">Ready when you are</h2>
     <ul class="muted" id="lobby-facts" style="margin:0;padding-left:1.1rem"></ul>
     <div id="lobby-ai"></div>
+    <div id="lobby-voice" hidden></div>
     <div id="lobby-mic" class="row" hidden>
       <button class="btn btn-small" id="mic-check" type="button">Check my microphone</button>
       <span class="small" id="mic-check-result" role="status"></span>

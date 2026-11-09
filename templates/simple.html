@@ -1,36 +1,16 @@
 {% extends "base.html" %}
-{% block title %}{% if kind == 'error' %}{{ message }}{% elif kind == 'connect' %}Connecting{% else %}Sign in{% endif %} — {{ app_name }}{% endblock %}
+{% block title %}{% if kind == 'error' %}{{ message }}{% elif kind == 'connect' %}Connecting{% else %}Back shortly{% endif %} — {{ app_name }}{% endblock %}
 {% block footer %}{% endblock %}
 {% block main %}
 <div class="simple">
   <div class="panel stack">
-  {% if kind == 'login' %}
-    <h1>Sign in</h1>
-    <p class="muted">Your reports and progress are saved to your account. You can try an interview first without signing in.</p>
-    {% if error %}<p class="error-box" role="alert">{{ error }}</p>{% endif %}
-    <a class="btn btn-primary btn-big google-btn" href="/auth/login?next={{ next | urlencode }}">{{ 'Continue with Google' if google else 'Continue' }}</a>
-    <p class="small faint">By signing in you agree to the <a href="/terms">terms</a> and the <a href="/privacy">privacy notice</a>.</p>
-
-  {% elif kind == 'dev-login' %}
-    <h1>Local sign-in</h1>
-    <p class="note small">Google sign-in isn't configured, so this development server lets you sign in with any email. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env to switch to Google.</p>
-    {% if error %}<p class="error-box" role="alert">{{ error }}</p>{% endif %}
-    <form method="post" action="/auth/dev" class="stack">
-      <input type="hidden" name="csrf" value="{{ csrf }}">
-      <div class="field"><label for="email">Email</label><input id="email" name="email" type="email" required autofocus></div>
-      <div class="field"><label for="name">Name</label><input id="name" name="name" type="text" autocomplete="name"></div>
-      <button class="btn btn-primary" type="submit">Sign in</button>
-    </form>
-
-  {% elif kind == 'connect' %}
+  {% if kind == 'connect' %}
     <h1>Connecting your account</h1>
     <p class="muted" id="connect-status">Finishing the OpenRouter sign-in…</p>
     <a class="btn" href="/app/settings" id="connect-back" hidden>Go back</a>
-
   {% elif kind == 'maintenance' %}
     <h1>Back shortly</h1>
     <p class="muted">The site is being updated. Your saved reports are safe. Try again in a few minutes.</p>
-
   {% else %}
     <h1>{{ message }}</h1>
     <p class="muted">Check the address, or go back to where you were.</p>

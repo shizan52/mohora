@@ -138,7 +138,7 @@ def check() -> None:
     print("\nChecking")
     failed = False
     for name, cmd in (("Lint", ["-m", "ruff", "check", "."]), ("Tests", ["-m", "pytest", "-q"])):
-        say(f"{name}…")
+        say(f"{name}...")
         failed |= subprocess.call([sys.executable, *cmd], cwd=ROOT) != 0
     env = read_env()
     say("Configuration:")

@@ -117,6 +117,12 @@
   </section>
   {% endfor %}
 
+  {% if next_stage %}
+  <div class="cta-band no-print" style="margin-top:2.5rem">
+    <div><h2>Next: {{ next_stage.title }}</h2><p>Step {{ next_stage.number }} of {{ next_stage.total }} in your hiring process. Your settings carry over.</p></div>
+    <a class="btn btn-big" href="/app/new?journey=next">Continue</a>
+  </div>
+  {% endif %}
   <div class="row no-print" style="margin-top:2rem">
     <a class="btn btn-primary" href="/app/new?again={{ session.id }}">Practise this again</a>
     <a class="btn" href="/app/new">Set up a different interview</a>

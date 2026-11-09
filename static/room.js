@@ -1,19 +1,20 @@
-// The interview setup page (questions from the CV) and the interview room.
+// The interview room, plus the interview vocabulary the setup page shares.
 //
 // The model only voices the interviewer. This file decides what happens next:
 // when to follow up, when to move on, when to give feedback and how to score.
 // That keeps small free models on track.
 
-import { $, el, api, toast, track, fill, parseJSON, chat, activeConnection, describe, openAIDialog, AIError } from './app.js';
+import { $, el, api, toast, fill, parseJSON, chat, activeConnection, connections, describe, openAIDialog, AIError } from './app.js';
+import { Avatar, personFor } from './avatar.js';
 import * as voice from './voice.js';
 
-const LEVELS = { intern: 'intern', fresher: 'fresh graduate', junior: 'junior', mid: 'mid-level', senior: 'senior', lead: 'lead or manager' };
-const PERSONAS = {
+export const LEVELS = { intern: 'intern', fresher: 'fresh graduate', junior: 'junior', mid: 'mid-level', senior: 'senior', lead: 'lead or manager' };
+export const PERSONAS = {
   friendly: 'warm and encouraging, relaxed pace, patient with pauses',
   neutral: 'professional and neutral, polite and efficient',
   skeptical: 'a skeptical senior interviewer: terse, probes every claim and asks for evidence',
 };
-const LANGS = {
+export const LANGS = {
   en: { rule: 'Speak English.', name: 'English', feedback: 'English', stt: 'en-US', tts: 'en', again: "Let's take that one again.", thanks: 'Thank you.' },
   bn: {
     rule: 'Speak natural, polite Bangla in Bengali script, the way an interviewer in Dhaka would. Keep technical terms in English.',
@@ -24,19 +25,29 @@ const LANGS = {
     name: 'Bangla with English terms', feedback: 'simple Bangla (Bengali script) with English terms', stt: 'bn-BD', tts: 'bn', again: 'চলুন, প্রশ্নটা আবার করি।', thanks: 'ধন্যবাদ।',
   },
 };
-const MAX_FOLLOWUPS = { easy: 1, normal: 1, hard: 2 };
-const SOURCE_LABEL = { opener: 'opener', cv: 'from your CV', jd: 'from the job post', role: 'for the role', you: 'your question' };
+export const MAX_FOLLOWUPS = { easy: 1, normal: 1, hard: 2 };
+export const SOURCE_LABEL = { opener: 'opener', cv: 'from your CV', jd: 'from the job post', role: 'for the role', you: 'your question' };
+export const TALK = {
+  video: { ask: 'voice', input: 'voice', camera: true, label: 'Video call' },
+  voice: { ask: 'voice', input: 'voice', camera: false, label: 'Voice call' },
+  listen: { ask: 'voice', input: 'text', camera: false, label: 'Listen and type' },
+  read: { ask: 'text', input: 'voice', camera: false, label: 'Read and speak' },
+  text: { ask: 'text', input: 'text', camera: false, label: 'Text chat' },
+};
 
-const initials = (name) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+const followupLimit = (pack, o) => pack.followups ?? MAX_FOLLOWUPS[o.difficulty] ?? 1;
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const round1 = (x) => Math.round(x * 10) / 10;
 
-function promptVars(run) {
+export const interviewerFor = (run) =>
+  personFor(run.options.interviewer || (run.pack.interviewer.name.startsWith('Tanvir') ? 'tanvir' : 'ayesha'));
+
+export function promptVars(run) {
   const o = run.options;
   const p = run.pack;
   const lang = LANGS[o.lang] || LANGS.en;
   return {
-    interviewer_name: p.interviewer.name,
+    interviewer_name: interviewerFor(run).name,
     interviewer_role: p.interviewer.role,
     company_part: o.company ? ` at ${o.company}` : '',
     target_role: o.role,
@@ -67,375 +78,6 @@ function candidateContext(run) {
   return parts.length ? parts.join('\n') : 'No CV or job description was given.';
 }
 
-// ======================================================================= setup page
-
-function setupPage() {
-  const data = JSON.parse($('#setup-data').textContent);
-  const form = $('#setup-form');
-  const packs = Object.fromEntries(data.packs.map((p) => [p.slug, p]));
-  let cv = '';
-  let plan = null;
-  let profile = null;
-  let countTouched = false;
-
-  const pack = () => packs[form.elements.pack.value] || data.packs[0];
-  const jd = () => $('#jd').value.trim();
-
-  const last = (() => {
-    try {
-      return JSON.parse(localStorage.getItem('mohora.setup.last') || 'null');
-    } catch {
-      return null;
-    }
-  })();
-  const preset = data.previous || last || {};
-  for (const name of ['role', 'level', 'company', 'persona', 'difficulty', 'lang', 'input', 'mode']) {
-    if (preset[name] && form.elements[name]) form.elements[name].value = preset[name];
-  }
-  const packSlug = data.selected || preset.pack;
-  if (packs[packSlug]) form.elements.pack.value = packSlug;
-  if (data.previous?.questions?.length) plan = data.previous.questions.map((q) => ({ why: '', competency: '', ...q }));
-
-  try {
-    const saved = JSON.parse(localStorage.getItem('mohora.cv') || 'null');
-    if (saved?.text) {
-      setCV(saved.text, `Using the CV saved on this device (${saved.name}).`);
-      $('#cv-remember').checked = true;
-    }
-  } catch {}
-
-  if (!voice.canListen) {
-    form.elements.input.value = 'text';
-    form.querySelector('input[name="input"][value="voice"]').disabled = true;
-    $('#voice-note').textContent = 'Speaking needs Chrome or Edge. In this browser you type your answers.';
-  }
-
-  function onPackChange() {
-    const p = pack();
-    $('#who-mono').textContent = initials(p.interviewer.name);
-    $('#who-name').textContent = p.interviewer.name;
-    $('#who-role').textContent = `${p.interviewer.role}, interviewing you`;
-    $('#who-note').textContent = `${p.title}: ${p.summary}`;
-    $('#jd-optional').textContent = p.needs_jd ? '(needed for this type)' : '(optional)';
-    if (!countTouched) form.elements.count.value = p.default_count || 5;
-    markStale();
-  }
-
-  function markStale() {
-    if (!plan) return;
-    $('#plan-status').textContent = 'You changed the settings. Prepare the questions again, or start with these.';
-    estimate();
-  }
-
-  function setCV(text, note) {
-    cv = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, 12000);
-    $('#cv-status').textContent = note;
-    $('#cv-status').className = 'small status-ok';
-    $('#cv-clear').hidden = !cv;
-    $('#mix-field').hidden = !cv;
-    if ($('#cv-remember').checked) saveCV();
-    markStale();
-  }
-
-  function saveCV(name = 'pasted text') {
-    if (!cv) return;
-    try {
-      localStorage.setItem('mohora.cv', JSON.stringify({ name, text: cv }));
-    } catch {}
-  }
-
-  async function readFile(file) {
-    const status = $('#cv-status');
-    status.className = 'small';
-    status.textContent = `Reading ${file.name}…`;
-    try {
-      const { text, note } = await extractText(file);
-      if (text.trim().length < 80) throw new Error('No text found in this file. If it is a scanned image, paste the text instead.');
-      setCV(text, `Read ${file.name} (${note}, ${text.length.toLocaleString()} characters).`);
-      if ($('#cv-remember').checked) saveCV(file.name);
-    } catch (err) {
-      status.className = 'small status-bad';
-      status.textContent = err.message;
-    }
-  }
-
-  $('#cv-file').addEventListener('change', (e) => e.target.files[0] && readFile(e.target.files[0]));
-  const drop = $('#cv-drop');
-  drop.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    drop.classList.add('over');
-  });
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', (e) => {
-    e.preventDefault();
-    drop.classList.remove('over');
-    if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
-  });
-  $('#cv-paste').addEventListener('click', () => {
-    const area = $('#cv-text');
-    area.hidden = !area.hidden;
-    if (!area.hidden) area.focus();
-  });
-  $('#cv-text').addEventListener('change', (e) => setCV(e.target.value, e.target.value.trim() ? 'Using the text you pasted.' : ''));
-  $('#cv-clear').addEventListener('click', () => {
-    cv = '';
-    $('#cv-text').value = '';
-    $('#cv-file').value = '';
-    $('#cv-status').textContent = '';
-    $('#cv-clear').hidden = true;
-    $('#mix-field').hidden = true;
-    localStorage.removeItem('mohora.cv');
-    $('#cv-remember').checked = false;
-    markStale();
-  });
-  $('#cv-remember').addEventListener('change', (e) => (e.target.checked ? saveCV() : localStorage.removeItem('mohora.cv')));
-
-  form.addEventListener('change', (e) => {
-    if (e.target.name === 'pack') return onPackChange();
-    if (e.target.name === 'count') countTouched = true;
-    if (['role', 'level', 'company', 'lang', 'mix', 'count', 'jd', 'instructions', 'own'].includes(e.target.name)) markStale();
-    estimate();
-  });
-
-  function options() {
-    const f = new FormData(form);
-    const text = (name) => String(f.get(name) || '').trim();
-    return {
-      role: text('role').slice(0, 120),
-      level: text('level'),
-      company: text('company').slice(0, 120),
-      persona: text('persona'),
-      difficulty: text('difficulty'),
-      lang: text('lang'),
-      input: text('input') || 'text',
-      mode: text('mode'),
-      mix: cv ? text('mix') || 'both' : 'role',
-      count: Math.min(12, Math.max(2, Number(f.get('count')) || 5)),
-      instructions: text('instructions').slice(0, 600),
-      own: text('own').split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 10),
-    };
-  }
-
-  function fromBank(p, count) {
-    // Opener first, then one question per competency, easier ones first.
-    const picked = [{ q: p.opener, competency: '', source: 'opener', why: 'Warms up and frames the rest' }];
-    const pool = [...(p.bank || [])].sort(() => Math.random() - 0.5).sort((a, b) => (a.d || 2) - (b.d || 2));
-    const seen = new Set();
-    for (const item of pool) {
-      if (picked.length >= count) break;
-      if (seen.has(item.c) && pool.length - seen.size > count) continue;
-      seen.add(item.c);
-      picked.push({ q: item.q, competency: item.c, source: 'role', why: '' });
-    }
-    return picked;
-  }
-
-  async function buildPlan() {
-    const o = options();
-    const p = pack();
-    const status = $('#plan-status');
-    const error = $('#setup-error');
-    error.hidden = true;
-    if (!o.role) return showSetupError('Add the job title first, so the questions fit the job.');
-    if (p.needs_jd && !jd()) return showSetupError('This interview type needs a job description. Paste it in step 3.');
-
-    const own = o.own.map((q) => ({ q, competency: '', source: 'you', why: 'You asked for this one' }));
-    const count = Math.max(1, o.count - own.length);
-    const needsAI = p.needs_plan || cv || jd() || o.instructions;
-    const button = $('#plan-btn');
-
-    if (!needsAI) {
-      profile = null;
-      plan = fromBank(p, count);
-    } else {
-      const conn = activeConnection();
-      if (!conn) {
-        openAIDialog();
-        return showSetupError('Connect an AI first. It writes questions from your CV.');
-      }
-      button.disabled = true;
-      status.className = 'small';
-      status.textContent = cv ? 'Reading your CV and writing questions…' : 'Writing questions…';
-      const mixRule = { both: 'Mix questions about the CV with standard questions for the role, roughly half each.', cv: 'Base most questions on the CV.', role: 'Use standard questions for the role. Do not use the CV.' }[o.mix];
-      const vars = promptVars({ pack: p, options: o, profile: null, jd: '' });
-      const prompt = fill(data.prompts.plan, {
-        ...vars,
-        competencies: (p.competencies || []).join(', ') || 'whatever matters most for this role',
-        count,
-        mix_rule: cv ? mixRule : 'There is no CV. Use the role and the job description.',
-        focus: o.instructions || 'nothing specific',
-        bank_examples: (p.bank || []).slice(0, 5).map((b) => `- ${b.q}`).join('\n') || '(none)',
-        jd: jd().slice(0, 6000),
-        cv: cv.slice(0, 9000),
-        opener: p.opener,
-      });
-      try {
-        const raw = await chat(conn, [{ role: 'user', content: prompt }], { json: true, model: conn.coachModel || conn.model, maxTokens: 1600, temperature: 0.6 });
-        const result = parseJSON(raw);
-        const questions = (result?.questions || []).filter((q) => q && typeof q.q === 'string' && q.q.trim());
-        if (!questions.length) throw new AIError("The AI didn't send back a question list. Try again, or pick another model.", 'parse');
-        plan = questions.slice(0, count).map((q, i) => ({
-          q: q.q.trim(),
-          competency: String(q.competency || ''),
-          source: i === 0 ? 'opener' : ['cv', 'jd', 'role'].includes(q.source) ? q.source : 'role',
-          why: String(q.why || ''),
-        }));
-        profile = cv && result.profile && typeof result.profile === 'object' ? result.profile : null;
-        track('plan_built', { pack: p.slug, cv: Boolean(cv), jd: Boolean(jd()) });
-      } catch (err) {
-        status.textContent = '';
-        button.disabled = false;
-        return showSetupError(err.message);
-      }
-      button.disabled = false;
-    }
-    plan.splice(1, 0, ...own);
-    status.className = 'small status-ok';
-    status.textContent = 'Ready. Edit anything you like.';
-    button.textContent = 'Prepare again';
-    renderProfile();
-    renderPlan();
-  }
-
-  function renderProfile() {
-    const box = $('#profile');
-    box.hidden = !profile;
-    if (!profile) return;
-    box.replaceChildren(
-      el('p', { class: 'faint small', style: 'margin:0' }, 'What the interviewer noticed in your CV'),
-      el('h3', { style: 'margin:.2rem 0 .3rem' }, [profile.name, profile.headline].filter(Boolean).join(', ')),
-      el('div', { class: 'profile-skills' }, (profile.skills || []).slice(0, 8).map((s) => el('span', { class: 'tag' }, s))),
-      profile.highlights?.length ? el('ul', { class: 'small muted', style: 'margin:.7rem 0 0;padding-left:1.1rem' }, profile.highlights.slice(0, 4).map((h) => el('li', {}, h))) : '');
-  }
-
-  function renderPlan() {
-    const list = $('#plan');
-    list.replaceChildren(...plan.map((item, i) => {
-      const area = el('textarea', { rows: 2, 'aria-label': `Question ${i + 1}` });
-      area.value = item.q;
-      area.addEventListener('input', () => (item.q = area.value));
-      return el('li', {},
-        el('div', {}, area, item.why ? el('div', { class: 'why' }, item.why) : ''),
-        el('div', { style: 'text-align:right' },
-          el('span', { class: `tag tag-${item.source}` }, SOURCE_LABEL[item.source] || item.source),
-          el('div', {}, el('button', { type: 'button', class: 'btn btn-quiet btn-small', onclick: () => { plan.splice(i, 1); renderPlan(); } }, 'Remove'))));
-    }));
-    $('#plan-add').hidden = false;
-    $('#start-btn').disabled = plan.length === 0;
-    estimate();
-  }
-
-  function addOwn() {
-    const input = $('#add-q');
-    const q = input.value.trim();
-    if (!q) return;
-    plan ||= [];
-    plan.push({ q, competency: '', source: 'you', why: 'You asked for this one' });
-    input.value = '';
-    renderPlan();
-  }
-  $('#add-q-btn').addEventListener('click', addOwn);
-  $('#add-q').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      addOwn();
-    }
-  });
-
-  function showSetupError(message) {
-    const box = $('#setup-error');
-    box.textContent = message;
-    box.hidden = false;
-  }
-
-  function estimate() {
-    const o = options();
-    const n = plan?.length || o.count;
-    const turns = 2 + n * (1 + MAX_FOLLOWUPS[o.difficulty || 'normal'] * 0.7);
-    const calls = Math.round(turns + n + 1 + (pack().needs_plan || cv ? 1 : 0));
-    const tokens = Math.round((turns * 1900 + n * 1800 + 1500 + (cv ? 1600 + cv.length / 3.5 : 0)) / 1000);
-    $('#estimate').textContent = `About ${calls} calls and ${tokens}k tokens on your AI account. Free tiers usually cover this.`;
-  }
-
-  function drawAI() {
-    const conn = activeConnection();
-    $('#ai-box').replaceChildren(conn
-      ? el('p', { class: 'small', style: 'margin:0' }, 'Interviewer runs on ', el('b', {}, describe(conn)), '. ', el('button', { type: 'button', class: 'btn btn-quiet btn-small', onclick: openAIDialog }, 'Change'))
-      : el('div', { class: 'stack', style: '--gap:.6rem' },
-        el('p', { class: 'small', style: 'margin:0' }, el('b', {}, 'No AI connected yet. '), 'Sign in with OpenRouter, or paste a free Gemini or Groq key.'),
-        el('button', { type: 'button', class: 'btn btn-small btn-primary', onclick: openAIDialog }, 'Connect an AI')));
-  }
-  window.addEventListener('ai-change', drawAI);
-
-  $('#plan-btn').addEventListener('click', buildPlan);
-  $('#start-btn').addEventListener('click', async () => {
-    const o = options();
-    const p = pack();
-    $('#setup-error').hidden = true;
-    const questions = (plan || []).map((q) => ({ ...q, q: q.q.trim() })).filter((q) => q.q);
-    if (!o.role) return showSetupError('Add the job title first.');
-    if (!questions.length) return showSetupError('Prepare the questions first.');
-    if (!activeConnection()) {
-      openAIDialog();
-      return showSetupError('Connect an AI first.');
-    }
-    const button = $('#start-btn');
-    button.disabled = true;
-    button.textContent = 'Opening the room…';
-    try {
-      const config = {
-        role: o.role, level: o.level, company: o.company, persona: o.persona, difficulty: o.difficulty,
-        lang: o.lang, input: o.input, mode: o.mode, has_cv: Boolean(cv), has_jd: Boolean(jd()),
-        questions: questions.map(({ q, source }) => ({ q, source })),
-      };
-      const { id } = await api('/api/sessions', { method: 'POST', body: { pack: p.slug, config } });
-      const run = { pack: p, options: o, plan: questions, profile, jd: jd().slice(0, 1500) };
-      sessionStorage.setItem(`mohora.run.${id}`, JSON.stringify(run));
-      const { role, level, persona, difficulty, lang, input, mode } = o;
-      localStorage.setItem('mohora.setup.last', JSON.stringify({ role, level, persona, difficulty, lang, input, mode, pack: p.slug }));
-      location.href = `/app/room/${id}`;
-    } catch (err) {
-      showSetupError(err.message);
-      button.disabled = false;
-      button.textContent = 'Start the interview';
-    }
-  });
-
-  onPackChange();
-  drawAI();
-  if (plan) renderPlan();
-  else estimate();
-}
-
-async function extractText(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (file.size > 8_000_000) throw new Error('That file is over 8 MB. Try a smaller file or paste the text.');
-  if (ext === 'pdf') {
-    const pdfjs = await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
-    const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-    const pages = [];
-    for (let i = 1; i <= Math.min(doc.numPages, 8); i++) {
-      const content = await (await doc.getPage(i)).getTextContent();
-      pages.push(content.items.map((item) => item.str + (item.hasEOL ? '\n' : ' ')).join(''));
-    }
-    return { text: pages.join('\n'), note: `${doc.numPages} page${doc.numPages > 1 ? 's' : ''}` };
-  }
-  if (ext === 'docx') {
-    await new Promise((resolve, reject) => {
-      if (window.mammoth) return resolve();
-      const script = el('script', { src: 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js' });
-      script.onload = resolve;
-      script.onerror = () => reject(new Error("Couldn't load the Word reader. Paste the text instead."));
-      document.head.append(script);
-    });
-    const result = await window.mammoth.extractRawText({ arrayBuffer: await file.arrayBuffer() });
-    return { text: result.value, note: 'Word document' };
-  }
-  if (['txt', 'md'].includes(ext)) return { text: await file.text(), note: 'text file' };
-  throw new Error('Use a PDF, a Word (.docx) file or plain text.');
-}
-
 // ======================================================================= interview room
 
 function roomPage() {
@@ -458,8 +100,21 @@ function roomPage() {
   const lang = LANGS[o.lang] || LANGS.en;
   const settings = voice.voiceSettings();
   const vars = promptVars(run);
+  o.ask ||= o.input === 'voice' ? 'voice' : 'text';
   const voiceWanted = o.input === 'voice';
+  const speaks = o.ask === 'voice' && voice.canSpeak;
   let useVoice = voiceWanted && voice.canListen;
+  const person = interviewerFor(run);
+  const who = { name: person.name, role: pack.interviewer.role };
+  const avatar = new Avatar($('#ai-avatar'), person.id, { mood: o.persona });
+  const lobbyAvatar = new Avatar($('#lobby-avatar'), person.id, { mood: o.persona });
+  const openaiKey = connections().find((c) => c.provider === 'openai' && c.key && !c.relay)?.key || '';
+  const speaker = new voice.Speaker({
+    lang: lang.tts, gender: person.gender, settings, openaiKey,
+    onLevel: (v) => avatar.setLevel(v),
+    onFallback: () => toast('That voice stopped working, so the browser voice takes over.', true),
+  });
+  let camera = null;
 
   run.state ||= {
     phase: 'lobby', qi: 0, elapsed: 0, hints: 2, turns: [], wrap: [], pending: null, lastNote: '',
@@ -485,15 +140,17 @@ function roomPage() {
 
   // ---------------------------------------------------------- view
 
-  const who = pack.interviewer;
-  $('#ai-mono').textContent = initials(who.name);
   $('#ai-name').textContent = `${who.name}, ${who.role}`;
   $('#title').textContent = `${pack.title}: ${o.role}`;
   $('#meter').replaceChildren(...Array.from({ length: 9 }, () => el('i')));
+  if (!useVoice && !o.camera) {
+    $('#meter').outerHTML = '<svg class="you-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><div class="meter" id="meter" hidden></div>';
+  }
 
-  function setAI(state, speaking = false) {
-    $('#ai-state').textContent = state;
-    $('#tile-ai').classList.toggle('speaking', speaking);
+  function setAI(label, mode = 'idle') {
+    $('#ai-state').textContent = label;
+    $('#tile-ai').classList.toggle('speaking', mode === 'speaking');
+    avatar.setState(mode);
   }
 
   function setYou(state, listening = false) {
@@ -625,7 +282,7 @@ function roomPage() {
     const nextQ = st.blocks[st.qi + 1]?.q;
     if (reply.intent === 'next' && isLast) reply.intent = 'wrap_up';
     if (reply.intent === 'wrap_up' && !isLast) return { intent: 'next', say: `${lang.thanks} ${nextQ}` };
-    if (reply.intent === 'follow_up' && block.followups > MAX_FOLLOWUPS[o.difficulty]) {
+    if (reply.intent === 'follow_up' && block.followups > followupLimit(pack, o)) {
       return isLast ? { intent: 'wrap_up', say: reply.say } : { intent: 'next', say: `${lang.thanks} ${nextQ}` };
     }
     return reply;
@@ -641,7 +298,7 @@ function roomPage() {
   function directorNote() {
     const block = st.blocks[st.qi];
     const clarify = ' If the candidate asked you to repeat or explain the question instead of answering it, do only that (intent "clarify").';
-    if (block.followups >= MAX_FOLLOWUPS[o.difficulty] || overTime()) return `Move on now, no more follow-ups on this question. ${moveOnNote()}${clarify}`;
+    if (block.followups >= followupLimit(pack, o) || overTime()) return `Move on now, no more follow-ups on this question. ${moveOnNote()}${clarify}`;
     return `The candidate answered question ${st.qi + 1} of ${st.blocks.length} ("${block.q}"). If the answer is vague, misses a concrete result, hides who did what, or invites an obvious deeper question, ask ONE short follow-up about that (intent "follow_up"). Otherwise: ${moveOnNote()}${clarify}`;
   }
 
@@ -663,16 +320,19 @@ function roomPage() {
     }, 1500);
   }
 
-  async function aiSays(text, { listenAfter = true } = {}) {
+  async function aiSays(text, { listenAfter = true, reaction = '' } = {}) {
     caption(who.name, text);
-    setAI('Speaking', true);
+    $('#caption').classList.toggle('big', !speaks);
     setControls(false);
-    if (voiceWanted && voice.canSpeak) {
-      await voice.speak(text, { lang: lang.tts, rate: settings.rate || 1, voice: settings[`voice_${lang.tts}`] || '' });
+    if (reaction) avatar.react(reaction);
+    if (speaks) {
+      setAI('', 'speaking');
+      await speaker.say(text);
     } else {
-      await new Promise((r) => setTimeout(r, Math.min(2500, 400 + text.length * 12)));
+      setAI('', 'idle');
+      await new Promise((r) => setTimeout(r, Math.min(2200, 400 + text.length * 10)));
     }
-    setAI('');
+    setAI('', 'listening');
     lastSpokeAt = performance.now();
     if (listenAfter && !paused && st.phase !== 'done') readyForAnswer();
   }
@@ -691,12 +351,12 @@ function roomPage() {
     const first = st.blocks[0].q;
     const name = run.profile?.name ? ` The candidate's name is ${run.profile.name}.` : '';
     const note = `Open the interview. Greet the candidate, introduce yourself in one sentence, then ask the first question in your own words: "${first}". Use intent "next".${name}`;
-    setAI('Joining');
+    setAI('Joining', 'thinking');
     try {
       const reply = shape(await ask('interviewer', buildMessages(note), { json: true, maxTokens: 400, temperature: 0.7 }));
       addTurn('ai', reply.say, { intent: 'next' });
       updatePhase();
-      await aiSays(reply.say);
+      await aiSays(reply.say, { reaction: 'smile' });
     } catch (err) {
       showError(err, intro);
     }
@@ -706,7 +366,7 @@ function roomPage() {
     st.lastNote = note;
     persist();
     setControls(false);
-    setAI('Thinking');
+    setAI('Thinking', 'thinking');
     let reply;
     try {
       reply = enforce(shape(await ask('interviewer', buildMessages(note), { json: true, maxTokens: 400, temperature: 0.7 })));
@@ -733,7 +393,7 @@ function roomPage() {
     else if (reply.intent === 'follow_up') st.blocks[st.qi].followups += 1;
     addTurn('ai', reply.say, { intent: reply.intent });
     updatePhase();
-    await aiSays(reply.say);
+    await aiSays(reply.say, { reaction: { follow_up: 'curious', next: 'nod', wrap_up: 'smile' }[reply.intent] || '' });
   }
 
   async function submitAnswer(text, metrics) {
@@ -751,7 +411,7 @@ function roomPage() {
   async function closeInterview() {
     const note = 'The candidate has replied to your last question. If they asked you something, answer briefly and plausibly in character, keeping details general. Then thank them and close the interview in one or two warm sentences. Use intent "wrap_up".';
     setControls(false);
-    setAI('Thinking');
+    setAI('Thinking', 'thinking');
     try {
       const reply = shape(await ask('interviewer', buildMessages(note), { json: true, maxTokens: 300, temperature: 0.7 }));
       addTurn('ai', reply.say, { intent: 'wrap_up' });
@@ -766,7 +426,7 @@ function roomPage() {
 
   function startListening() {
     if (!useVoice || listener?.active) return;
-    voice.stopSpeaking();
+    speaker.stop();
     listener = new voice.Listener({
       lang: lang.stt,
       silenceMs: (settings.silence || 0) * 1000,
@@ -1025,9 +685,11 @@ function roomPage() {
     if (st.finishing) return;
     st.finishing = true;
     stopListening();
-    voice.stopSpeaking();
+    speaker.stop();
     clearInterval(clock);
     stopMeter?.();
+    camera?.getTracks().forEach((t) => t.stop());
+    setAI('', 'idle');
     st.phase = 'done';
     persist();
     $('#feedback').hidden = true;
@@ -1065,7 +727,7 @@ function roomPage() {
         eval: b.eval,
       })),
       interviewer: who,
-      options: { role: o.role, level: o.level, company: o.company, persona: o.persona, difficulty: o.difficulty, lang: o.lang, input: o.input, mode: o.mode },
+      options: { role: o.role, level: o.level, company: o.company, persona: o.persona, difficulty: o.difficulty, lang: o.lang, talk: o.talk, input: o.input, mode: o.mode, interviewer: person.id },
       ai: conn ? { provider: conn.provider, model: conn.model, coach: conn.coachModel || conn.model } : null,
     };
     const body = {
@@ -1094,14 +756,13 @@ function roomPage() {
   function drawLobby() {
     const conn = activeConnection();
     const resuming = st.turns.length > 0;
-    $('#lobby-mono').textContent = initials(who.name);
     $('#lobby-name').textContent = who.name;
     $('#lobby-role').textContent = `${who.role}${o.company ? `, ${o.company}` : ''}`;
     $('#lobby-title').textContent = resuming ? 'Pick up where you left off' : 'Ready when you are';
     const facts = [
       `${st.blocks.length} questions for ${o.role}, about ${Math.round(((pack.minutes || 20) / (pack.default_count || 5)) * st.blocks.length)} minutes`,
       o.mode === 'practice' ? 'Feedback after each question, and you can redo it' : 'Feedback only at the end',
-      useVoice ? 'You answer by speaking. Captions show what was heard.' : 'You answer by typing',
+      `${(TALK[o.talk] || TALK.text).label}: ${speaks ? 'the interviewer speaks' : 'questions appear as text'}, ${useVoice ? 'you answer out loud' : 'you type your answers'}${o.camera ? ', camera on (it stays on your device)' : ''}`,
       `Language: ${lang.name}`,
     ];
     if (voiceWanted && !voice.canListen) facts.push("This browser can't listen, so you'll type. Chrome or Edge can listen.");
@@ -1110,16 +771,56 @@ function roomPage() {
       ? el('p', { class: 'small', style: 'margin:0' }, 'Running on ', el('b', {}, describe(conn)), '. ', el('button', { class: 'btn btn-quiet btn-small', type: 'button', onclick: openAIDialog }, 'Change'))
       : el('p', { class: 'error-box small', style: 'margin:0' }, 'No AI connected on this device. ', el('button', { class: 'btn btn-small', type: 'button', onclick: openAIDialog }, 'Connect an AI')));
     $('#lobby-mic').hidden = !useVoice;
+    drawVoiceChoice();
     $('#begin').textContent = resuming ? 'Carry on' : 'Start the interview';
     $('#begin').disabled = !conn;
   }
   window.addEventListener('ai-change', drawLobby);
+
+  function drawVoiceChoice() {
+    const box = $('#lobby-voice');
+    box.hidden = !speaks;
+    if (!speaks) return;
+    const parts = [el('span', { class: 'small' }, `Voice: ${speaker.label}.`)];
+    if (speaker.canUpgrade) {
+      parts.push(' ', el('button', { class: 'btn btn-small', type: 'button', onclick: upgradeVoice }, 'Use a more natural voice (about 90 MB, once)'));
+    }
+    box.replaceChildren(...parts);
+  }
+
+  async function upgradeVoice() {
+    const box = $('#lobby-voice');
+    const bar = el('i', { style: '--p:2%' });
+    box.replaceChildren(el('span', { class: 'small' }, 'Downloading the natural voice. You can start meanwhile; it switches on when ready.'), el('div', { class: 'progress', style: 'margin-top:.5rem' }, bar));
+    try {
+      await speaker.useNatural((p) => bar.style.setProperty('--p', `${Math.max(2, Math.round(p))}%`));
+      toast('The natural voice is ready.');
+    } catch (err) {
+      toast(err.message, true);
+    }
+    drawVoiceChoice();
+  }
+
+  async function startCamera() {
+    try {
+      camera = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' } });
+      const video = el('video', { autoplay: true, playsinline: true, 'aria-label': 'Your camera' });
+      video.muted = true;
+      video.srcObject = camera;
+      $('#tile-you').prepend(video);
+      $('#tile-you').classList.add('camera');
+      $('#meter').classList.add('over');
+    } catch {
+      toast("The camera isn't available, so this runs as a voice call.", true);
+    }
+  }
 
   async function ensureMeter() {
     if (stopMeter || !useVoice) return;
     try {
       stopMeter = await voice.micLevel((v) => {
         level = level * 0.6 + v * 0.4;
+        avatar.setHeard(listener?.active ? level : 0);
         drawMeter();
       });
     } catch {
@@ -1149,10 +850,9 @@ function roomPage() {
   $('#begin').addEventListener('click', async () => {
     $('#lobby').hidden = true;
     if (st.phase === 'lobby') st.phase = 'live';
-    if (useVoice) {
-      await voice.voicesReady();
-      ensureMeter();
-    }
+    speaker.unlock();
+    if (useVoice) ensureMeter();
+    if (o.camera) startCamera();
     clock = setInterval(tick, 1000);
     updatePhase();
     if (st.phase === 'done') return finish();
@@ -1196,7 +896,7 @@ function roomPage() {
   function pause() {
     paused = true;
     stopListening();
-    voice.stopSpeaking();
+    speaker.stop();
     $('#paused').hidden = false;
   }
   $('#pause').addEventListener('click', pause);
@@ -1254,7 +954,11 @@ function roomPage() {
   updatePhase();
   setControls(false);
   drawLobby();
+  voice.voicesReady().then(() => {
+    speaker.engine = speaker.pickEngine();
+    drawVoiceChoice();
+  });
+  lobbyAvatar.react('smile', 2500);
 }
 
-if ($('#setup-form')) setupPage();
 if ($('#room-data')) roomPage();

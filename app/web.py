@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 
 from .config import ROOT, config
-from .db import utcnow
+from .db import cached_flags, utcnow
 
 templates = Jinja2Templates(directory=ROOT / "templates")
 
@@ -88,5 +88,5 @@ def mark_answer(text: str, quotes: list[dict] | None = None, fillers: list[str] 
     return Markup("").join(out)
 
 
-templates.env.globals.update(app_name=config.app_name, repo_url=config.repo_url, v=_asset_version())
+templates.env.globals.update(app_name=config.app_name, v=_asset_version(), site=cached_flags)
 templates.env.filters.update(ago=ago, short_date=short_date, mark_answer=mark_answer)
