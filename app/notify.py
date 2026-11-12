@@ -1,14 +1,18 @@
 """Telegram alerts for the site owner. Failures are logged and never reach the user."""
 
+import asyncio
 import html
+import json
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
+from sqlalchemy import func, select, text
 
 from .config import config
+from .db import Feedback, InterviewSession, Payment, SessionLocal, User, engine, utcnow
 
 log = logging.getLogger("mohora.telegram")
 
@@ -87,3 +91,41 @@ async def new_user(card: dict, number: int, ctx: dict) -> None:
 
 async def first_interview(card: dict, pack_title: str, overall: float | None) -> None:
     await send_admin(first_interview_text(card, pack_title, overall))
+
+
+def digest_text() -> str:
+    since = utcnow() - timedelta(days=1)
+    with SessionLocal() as db:
+        def count(model, *where) -> int:
+            return db.scalar(select(func.count(model.id)).where(*where)) or 0
+
+        earned = db.scalar(select(func.sum(Payment.amount)).where(
+            Payment.status == "approved", Payment.reviewed_at >= since)) or 0
+        finished = count(InterviewSession, InterviewSession.ended_at >= since)
+        started = count(InterviewSession, InterviewSession.started_at >= since)
+        lines = [
+            f"<b>{html.escape(config.app_name)}: last 24 hours</b>",
+            f"New people: {count(User, User.created_at >= since)} (total {count(User)})",
+            f"Active people: {count(User, User.last_seen_at >= since)}",
+            f"Interviews finished: {finished} of {started} started",
+            f"Payments: {earned:g} USDT received, {count(Payment, Payment.status == 'pending')} waiting for review",
+            f"New feedback: {count(Feedback, Feedback.status == 'new')}",
+            f"{config.base_url}/admin",
+        ]
+    return "\n".join(lines)
+
+
+def claim_digest(today: str) -> bool:
+    """True for exactly one worker per day, so the digest is sent once."""
+    with engine.begin() as conn:
+        claimed = conn.execute(
+            text("UPDATE settings SET value = :v WHERE key = 'digest_date' AND value <> :v"), {"v": json.dumps(today)})
+    return claimed.rowcount == 1
+
+
+async def digest_loop() -> None:
+    while True:
+        local = datetime.now(ZoneInfo(config.tz))
+        if local.hour >= 21 and claim_digest(local.date().isoformat()):
+            await send_admin(digest_text())
+        await asyncio.sleep(300)
