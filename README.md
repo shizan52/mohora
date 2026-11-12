@@ -6,17 +6,27 @@ It runs on the AI you already have: sign in with OpenRouter or Puter, paste a fr
 
 ![Home page with a live interviewer](docs/home.png)
 
+Most practice tools stop at one mock interview and a score. Mohora is built around the interview date: a daily plan, a readiness score you can see into, and weak answers that keep coming back until they land.
+
+![Practice hub with today's session, readiness score and plan](docs/practice.png)
+
 ## What it does
 
 - **CV first.** Upload a PDF or Word CV. The AI pulls out your profile, suggests roles from internship to lead, and lists the topics an interviewer will ask about. You pick the topics.
 - **Check the fit.** Paste a job post and get a screening score, missing keywords and concrete CV fixes.
-- **Seven interview types**, each with its own interviewer, questions and rubric: behavioral (STAR), role interview, HR and first job, job description match, online application questions, recruiter screen and final round.
+- **Eleven interview types**, each with its own interviewer, questions and rubric. Seven for jobs: behavioral (STAR), role interview, HR and first job, job description match, online application questions, recruiter screen and final round. Four specialist ones in Pro, each with one free try: salary negotiation, US student visa (F-1), IELTS speaking and viva board.
+- **A plan and a readiness score.** Set the interview date and get one short session per day, a light day before and a warm-up on the day. The score out of 100 is the sum of four visible parts, so it's clear what raises it.
+- **Weak answers come back.** Any answer under 4 out of 5 joins a review list and returns in a five-minute drill after one, three and seven days. Three good answers in a row retire it.
+- **Story bank.** Save an answer from a report as a STAR story, tidy it with AI, tag what it shows, and see which kinds of story are missing.
+- **Specific feedback, not generic.** Behavioral answers show which STAR parts were there and which were missing, next to the marked-up transcript.
+- **Share a result.** A public page with scores and summary only; the answers stay private. Invite a friend and both get a week of Pro.
+- **Question library.** A public page of the questions by interview type, each one a click away from practising it.
 - **The whole hiring process (Pro).** Practise the steps of a real application in order, from the written form to the final round, and skip the ones you don't need.
 - **Five ways to talk:** video call with your camera, voice call, listen and type, read and speak, or text chat.
 - **Two drawn interviewers** whose faces follow the conversation: they blink, look up while thinking, nod while you speak, raise their brows on a follow-up, and move their lips with the audio of their voice.
 - **Natural voices.** Edge's neural voices, a neural voice that runs in the browser (Kokoro), or OpenAI's voice through your own key. It measures the device first and only uses the in-browser voice when it can keep up.
 - **Feedback you can act on.** Your words come back highlighted (strong lines, weak lines, filler words), scored on five points, with a rewrite and a "fix this next". Redo any question.
-- **Owner tools.** Admin panel with funnel and usage numbers, user management, interview types and prompts editable as JSON, payments review, site flags, and a Telegram alert for every new sign-up.
+- **Owner tools.** Admin panel with funnel and usage numbers, user management, interview types and prompts editable as JSON, payments review, site flags, a Telegram alert for every new sign-up and a daily digest at 9 pm.
 - **Pro for 1 USDT.** TRC20 payments are verified on the TRON blockchain automatically; BEP20 payments go to the admin queue.
 
 ![Choosing how to talk and who interviews you](docs/setup.png)
@@ -72,12 +82,14 @@ run.py              one entry point for setup, dev, prod, checks, backups
 app/main.py         pages, API, security headers
 app/auth.py         Google sign-in, local sign-in, guards
 app/billing.py      Pro passes, USDT payments, TRON verification
+app/practice.py     practice hub: review schedule, readiness, plan, stories, sharing, question library
 app/admin.py        admin panel
 app/notify.py       Telegram alerts
 app/db.py           models, migrations, settings
 app/packs.json      interview types, hiring journey, prompts
 static/room.js      interview room and director
 static/setup.js     setup wizard
+static/practice.js  drills, goal, story bank, share links
 static/avatar.js    animated interviewers
 static/voice.js     speech recognition, voices, answer metrics
 static/app.js       AI connections and shared helpers
