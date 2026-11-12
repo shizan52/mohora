@@ -18,8 +18,10 @@ const coachModel = (conn) => conn.coachModel || conn.model;
 function options() {
   const talk = val('talk') || 'text';
   const mode = TALK[talk];
+  // Interviews that aren't about a job (visa, IELTS, viva) describe themselves instead of using the job title.
+  const about = val('scope') === 'journey' ? null : packs[val('pack')]?.about;
   return {
-    role: val('role').trim().slice(0, 120),
+    role: (about ? val('subject').trim() || about.default : val('role').trim()).slice(0, 120),
     level: val('level') || 'junior',
     company: val('company').trim().slice(0, 120),
     persona: val('persona'),
@@ -65,6 +67,10 @@ function validate(step) {
     if (!o.stages.length) return 'Keep at least one step of the hiring process.';
   }
   if (step === 3 && o.scope === 'single' && currentPack().needs_jd && !jd()) return 'This interview type needs a job description. Go back to step 2 and paste it.';
+  if (step === 3 && o.scope === 'single' && currentPack().pro && !data.has_pass) {
+    if (!data.signed_in) return 'Sign in to try this interview type once for free.';
+    if (data.tried.includes(currentPack().slug)) return "You've used your free try of this interview type. Pro unlocks it.";
+  }
   return '';
 }
 
@@ -327,8 +333,15 @@ $('#match-btn').addEventListener('click', async () => {
 // ------------------------------------------------------------------ questions
 
 function fromBank(p, count) {
+  const shuffled = [...(p.bank || [])].sort(() => Math.random() - 0.5);
+  if (p.sections) {
+    // A fixed running order, like the three parts of a speaking test.
+    return p.sections
+      .flatMap((section) => shuffled.filter((item) => item.c === section.c).slice(0, section.n))
+      .map((item, i) => ({ q: item.q, competency: item.c, source: i === 0 ? 'opener' : 'role', why: '' }));
+  }
   const picked = [{ q: p.opener, competency: '', source: 'opener', why: 'Warms up and frames the rest' }];
-  const pool = [...(p.bank || [])].sort(() => Math.random() - 0.5).sort((a, b) => (a.d || 2) - (b.d || 2));
+  const pool = shuffled.sort((a, b) => (a.d || 2) - (b.d || 2));
   const seen = new Set();
   for (const item of pool) {
     if (picked.length >= count) break;
@@ -347,7 +360,7 @@ async function buildPlan() {
   const own = o.own.map((q) => ({ q, competency: '', source: 'you', why: 'You asked for this one' }));
   const count = Math.max(1, (o.scope === 'journey' ? p.default_count || 5 : o.count) - own.length);
   const topics = state.topics.filter((t) => t.on);
-  const needsAI = p.needs_plan || state.cv || jd() || o.instructions;
+  const needsAI = !p.sections && (p.needs_plan || state.cv || jd() || o.instructions);
   const button = $('#plan-btn');
 
   if (!needsAI) {
@@ -497,6 +510,16 @@ function onPack() {
   if (!state.touched.has('count')) form.elements.count.value = p.default_count || 5;
   $('#jd-optional').textContent = p.needs_jd ? '(needed for Job description match)' : '(optional)';
   if (!state.touched.has('talk') && p.ask === 'text' && p.input === 'text') form.elements.talk.value = 'text';
+  const single = val('scope') === 'single';
+  const about = single ? p.about : null;
+  $('#subject-field').hidden = !about?.label;
+  $('#subject-label').textContent = about?.label || '';
+  $('#subject').placeholder = about?.placeholder || '';
+  $('#role-hint').hidden = !about;
+  $('#role-hint').textContent = about ? `Not needed for ${p.title}. You can leave this empty.` : '';
+  $('#pack-note').hidden = !(single && p.note);
+  $('#pack-note').textContent = p.note || '';
+  if (p.lang) form.elements.lang.value = p.lang;
   state.stale = true;
 }
 
@@ -504,9 +527,9 @@ form.addEventListener('change', (e) => {
   const name = e.target.name;
   if (name) state.touched.add(name);
   if (name === 'scope') onScope();
-  if (name === 'pack' || name === 'stage') onPack();
+  if (['pack', 'stage', 'scope'].includes(name)) onPack();
   if (name === 'persona') avatars.forEach((a) => a.setMood(val('persona')));
-  if (['role', 'level', 'company', 'lang', 'count', 'jd', 'instructions', 'own', 'difficulty'].includes(name)) state.stale = true;
+  if (['role', 'subject', 'level', 'company', 'lang', 'count', 'jd', 'instructions', 'own', 'difficulty'].includes(name)) state.stale = true;
   if (state.plan && state.stale && state.step === 5) setStatus('#plan-status', 'You changed something. Write new questions, or start with these.');
   estimate();
 });
@@ -549,6 +572,7 @@ function init() {
   } catch {}
   applyPreset(data.previous || last || {});
   if (data.role) form.elements.role.value = data.role;
+  if (data.ask) $('#own').value = data.ask;
   const packSlug = data.selected || data.previous?.pack;
   if (packs[packSlug]) form.elements.pack.value = packSlug;
   if (data.previous?.questions?.length) state.plan = data.previous.questions.map((q) => ({ why: '', competency: '', ...q }));

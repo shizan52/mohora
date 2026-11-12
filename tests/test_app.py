@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 import tempfile
@@ -20,9 +21,9 @@ os.environ.update({
 import pytest
 from fastapi.testclient import TestClient
 
-from app import billing, notify
+from app import billing, notify, practice
 from app.admin import validate_pack
-from app.db import InterviewSession, Payment, SessionLocal, User, set_setting
+from app.db import InterviewSession, Payment, ReviewItem, SessionLocal, Story, User, set_setting
 from app.main import app
 from app.web import mark_answer
 
@@ -251,3 +252,106 @@ def test_hiring_journey_needs_pro(client):
     token = sign_in(client, "journey@example.com")
     body = {"pack": "recruiter-screen", "config": {"journey": {"id": "j1", "stages": ["recruiter-screen"], "index": 0}}}
     assert client.post("/api/sessions", json=body, headers={"X-CSRF-Token": token}).status_code == 403
+
+
+def finish(client, headers, pack="behavioral-star", score=3.5, config=None) -> int:
+    """Start an interview and complete it with one answer scored `score`."""
+    report = copy.deepcopy(REPORT)
+    report["overall"] = report["blocks"][0]["eval"]["overall"] = score
+    body = {"pack": pack, "config": config or {"role": "Developer"}}
+    sid = client.post("/api/sessions", json=body, headers=headers).json()["id"]
+    res = client.patch(f"/api/sessions/{sid}", json={"status": "completed", "overall": score, "report": report}, headers=headers)
+    assert res.status_code == 200
+    return sid
+
+
+def test_library_sample_and_sitemap(client):
+    page = client.get("/questions").text
+    assert "Salary negotiation" in page and "What a good answer shows" in page
+    sample = client.get("/sample").text
+    assert "Real stories and one great number" in sample and "Result missing" in sample
+    assert "/questions" in client.get("/sitemap.xml").text
+    assert "Sitemap:" in client.get("/robots.txt").text
+
+
+def test_weak_answers_come_back_until_they_land(client):
+    headers = {"X-CSRF-Token": sign_in(client, "loop@example.com")}
+    assert client.get("/api/drill").status_code == 404
+    finish(client, headers, score=3.5)
+    drill = client.get("/api/drill").json()
+    assert drill["questions"] == ["Tell me about a failure."] and drill["pack"]["slug"] == "behavioral-star"
+    assert "weak answer" in client.get("/app").text
+    for _ in range(3):
+        finish(client, headers, score=4.5)
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(email="loop@example.com").one()
+        assert db.query(ReviewItem).filter_by(user_id=user.id).count() == 0
+
+
+def test_shared_report_hides_the_answers(client):
+    headers = {"X-CSRF-Token": sign_in(client, "sharer@example.com")}
+    sid = finish(client, headers)
+    url = client.post(f"/api/sessions/{sid}/share", json={"on": True}, headers=headers).json()["url"]
+    with TestClient(app) as visitor:
+        page = visitor.get(url.replace("http://127.0.0.1:8000", ""))
+        assert page.status_code == 200 and "Clear stories, thin results." in page.text
+        assert "myself" not in page.text and "rollback" not in page.text
+        assert visitor.post(f"/api/sessions/{sid}/share", json={"on": False}).status_code in (401, 403)
+    client.post(f"/api/sessions/{sid}/share", json={"on": False}, headers=headers)
+    assert client.get(url.replace("http://127.0.0.1:8000", "")).status_code == 404
+
+
+def test_story_bank(client):
+    headers = {"X-CSRF-Token": sign_in(client, "teller@example.com")}
+    story = {"title": "Payment timeout fix", "situation": "Payments failed.", "action": "I fixed it.", "tags": ["ownership", "nonsense"]}
+    first = client.post("/api/stories", json=story, headers=headers).json()["id"]
+    assert client.post("/api/stories", json={**story, "id": first, "title": "Renamed"}, headers=headers).status_code == 200
+    for _ in range(practice.FREE_STORIES - 1):
+        assert client.post("/api/stories", json=story, headers=headers).status_code == 200
+    assert client.post("/api/stories", json=story, headers=headers).status_code == 403
+    page = client.get("/app/stories").text
+    assert "Renamed" in page and "No story yet for" in page
+    with SessionLocal() as db:
+        assert db.get(Story, first).tags == ["ownership"]
+    with TestClient(app) as other:
+        other_headers = {"X-CSRF-Token": sign_in(other, "nosy@example.com")}
+        assert other.delete(f"/api/stories/{first}", headers=other_headers).status_code == 404
+    assert client.delete(f"/api/stories/{first}", headers=headers).status_code == 200
+
+
+def test_referral_gives_both_people_pro(client):
+    sign_in(client, "inviter@example.com")
+    with SessionLocal() as db:
+        code = db.query(User).filter_by(email="inviter@example.com").one().referral_code
+    with TestClient(app) as friend:
+        friend.get(f"/?ref={code}")
+        headers = {"X-CSRF-Token": sign_in(friend, "invited@example.com")}
+        finish(friend, headers)
+    with SessionLocal() as db:
+        inviter = db.query(User).filter_by(email="inviter@example.com").one()
+        invited = db.query(User).filter_by(email="invited@example.com").one()
+        assert invited.referred_by == inviter.id
+        assert inviter.has_pass and invited.has_pass
+
+
+def test_pro_interview_types_allow_one_free_try(client):
+    body = {"pack": "visa-f1", "config": {"role": "F-1 visa applicant"}}
+    assert client.post("/api/sessions", json=body, headers={"X-CSRF-Token": csrf(client)}).status_code == 403
+    headers = {"X-CSRF-Token": sign_in(client, "student@example.com")}
+    finish(client, headers, pack="visa-f1")
+    assert client.post("/api/sessions", json=body, headers=headers).status_code == 403
+    assert "visa-f1" in client.get("/app/new").text
+
+
+def test_readiness_and_plan():
+    assert practice.readiness([], 0, 0)["score"] == 0
+    packs = {"behavioral-star": {"slug": "behavioral-star", "title": "Behavioral", "pro": False, "minutes": 20}}
+    plan = practice.build_plan({}, packs, 2)
+    assert [item["kind"] for item in plan] == ["interview", "review", "warmup"]
+    assert len(practice.build_plan({}, packs, None)) == 5
+
+
+def test_plan_calendar_download(client):
+    sign_in(client, "planner@example.com")
+    res = client.get("/app/plan.ics")
+    assert res.headers["content-type"].startswith("text/calendar") and "BEGIN:VEVENT" in res.text

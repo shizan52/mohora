@@ -639,17 +639,6 @@ async function loginAvatars() {
 }
 
 function payPage() {
-  for (const button of $$('[data-copy]')) {
-    button.addEventListener('click', async () => {
-      const input = $(button.dataset.copy);
-      try {
-        await navigator.clipboard.writeText(input.value);
-        toast('Copied.');
-      } catch {
-        input.select();
-      }
-    });
-  }
   const form = $('#pay-form');
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -811,6 +800,17 @@ if ($('#goal-form')) onboarding();
 if ($('#feedback-form')) feedbackForm();
 for (const button of $$('[data-open-ai]')) button.addEventListener('click', openAIDialog);
 for (const button of $$('[data-print]')) button.addEventListener('click', () => window.print());
+for (const button of $$('[data-copy]')) {
+  button.addEventListener('click', async () => {
+    const input = $(button.dataset.copy);
+    try {
+      await navigator.clipboard.writeText(input.value);
+      toast('Copied.');
+    } catch {
+      input.select();
+    }
+  });
+}
 $('#voice-form')?.addEventListener('submit', (e) => e.preventDefault());
 for (const dialog of $$('dialog')) {
   dialog.addEventListener('click', (e) => e.target === dialog && dialog.close());

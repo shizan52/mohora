@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 {% set nav = 'home' %}
-{% set sources = {'opener': 'Opener', 'cv': 'From your CV', 'jd': 'From the job post', 'role': 'For the role', 'you': 'Your question'} %}
+{% set view = view | default('own') %}
+{% set sources = {'opener': 'Opener', 'cv': 'From your CV', 'jd': 'From the job post', 'role': 'For the role', 'you': 'Your question', 'review': 'Review'} %}
 {% set labels = {} %}
 {% for item in r.rubric %}{% set _ = labels.update({item.id: item.label}) %}{% endfor %}
-{% block title %}Report: {{ pack.title }} — {{ app_name }}{% endblock %}
+{% block title %}{% if view == 'shared' %}{{ owner }} scored {{ r.overall }} out of 5 in a {{ pack.title }} practice interview{% elif view == 'sample' %}Sample interview report{% else %}Report: {{ pack.title }}{% endif %} — {{ app_name }}{% endblock %}
+{% block description %}{% if view == 'own' %}{{ super() }}{% else %}{{ r.summary.headline if r.summary else '' }} See the scores, then practise your own interview with an AI interviewer.{% endif %}{% endblock %}
 {% block main %}
 <div class="wrap page">
-  {% if not user %}
+  {% if view == 'shared' %}
+  <p class="note">{{ owner }} shared this result from a practice interview on {{ app_name }}. It shows the scores and summary; the answers themselves stay private.</p>
+  {% elif view == 'sample' %}
+  <p class="note">This is a sample, so you can see what you get after an interview. The answers are written examples; your report is built from your own words.</p>
+  {% elif not user %}
   <p class="note no-print">This report is only in this browser for now. <a href="/login?next=/app/session/{{ session.id }}">Sign in</a> to keep it and track your progress.</p>
   {% endif %}
 
@@ -20,7 +26,7 @@
 
   <div class="split">
     <div class="stack">
-      {% if r.summary and r.summary.best_moment %}
+      {% if r.summary and r.summary.best_moment and view != 'shared' %}
       <div>
         <h2 style="font-size:1.5rem">Your best moment</h2>
         <p class="best"><mark class="m-strong">“{{ r.summary.best_moment.quote }}”</mark></p>
@@ -75,6 +81,16 @@
     </div>
     {% if b.skipped %}
       <p class="muted" style="margin-top:1rem">You skipped this one.</p>
+    {% elif view == 'shared' %}
+      {% if b.eval %}
+      <div class="rubric" style="margin-top:1.2rem;max-width:36rem">
+        {% for id, v in b.eval.scores.items() %}
+        <span>{{ labels.get(id, id) }}</span>
+        <div class="bar{% if v <= 2 %} low{% elif v >= 4 %} high{% endif %}"><i style="--v:{{ v }}"></i></div>
+        <span class="num">{{ v }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
     {% else %}
     <div class="qgrid">
       <div class="transcript stack">
@@ -93,6 +109,9 @@
           <p style="margin:.4rem 0 0">{{ b.eval.rewrite }}</p>
         </div>
         {% endif %}
+        {% if view == 'own' and user and b.turns %}
+        <div class="no-print"><button class="btn btn-small" type="button" data-save-story="{{ loop.index0 }}">Save as a story</button></div>
+        {% endif %}
       </div>
       <div class="stack">
         {% if b.eval %}
@@ -103,6 +122,11 @@
             <span class="num">{{ v }}</span>
             {% endfor %}
           </div>
+          {% if b.eval.parts %}
+          <div class="parts" aria-label="Parts of the answer">
+            {% for name, ok in b.eval.parts.items() %}<span class="part {{ 'ok' if ok else 'miss' }}">{{ name }}{{ '' if ok else ' missing' }}</span>{% endfor %}
+          </div>
+          {% endif %}
           {% if b.eval.worked %}<div><b>What worked</b><ul>{% for w in b.eval.worked %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
           {% if b.eval.improve %}<div><b>What to improve</b><ul>{% for w in b.eval.improve %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
           {% for q in b.eval.quotes if q.note %}
@@ -123,12 +147,41 @@
     <a class="btn btn-big" href="/app/new?journey=next">Continue</a>
   </div>
   {% endif %}
+  {% if view != 'own' %}
+  <div class="cta-band" style="margin-top:2.5rem">
+    <div><h2>Get a report like this on your own answers.</h2><p>Free with your own AI. About ten minutes.</p></div>
+    <a class="btn btn-big" href="/app/new">Start a free interview</a>
+  </div>
+  {% else %}
+  {% if user %}
+  <section class="panel no-print" style="margin-top:2.5rem" data-share="{{ session.id }}" data-slug="{{ session.share_slug or '' }}">
+    <div class="spread">
+      <div>
+        <h3 style="margin-bottom:.2rem">Share this result</h3>
+        <p class="small muted" style="margin:0">A public page with your scores and summary. What you said stays private.</p>
+      </div>
+      <button class="btn btn-small" type="button" data-share-toggle></button>
+    </div>
+    <div class="row" data-share-link hidden style="margin-top:.9rem">
+      <div class="copy-field" style="flex:1 1 20rem"><input id="share-url" type="text" readonly aria-label="Public link"><button class="btn btn-small" type="button" data-copy="#share-url">Copy</button></div>
+      <a class="btn btn-small" data-linkedin target="_blank" rel="noopener">Post on LinkedIn</a>
+    </div>
+  </section>
+  {% endif %}
   <div class="row no-print" style="margin-top:2rem">
     <a class="btn btn-primary" href="/app/new?again={{ session.id }}">Practise this again</a>
     <a class="btn" href="/app/new">Set up a different interview</a>
     <button class="btn btn-quiet" type="button" data-print>Print or save as PDF</button>
   </div>
+  {% endif %}
+  {% if pack.note %}<p class="small faint" style="margin-top:1.5rem">{{ pack.note }}</p>{% endif %}
   {% if r.ai %}<p class="small faint" style="margin-top:1.5rem">Interviewer model: {{ r.ai.model or 'provider default' }}. Feedback model: {{ r.ai.coach or 'provider default' }}. Scores come from an AI and can be wrong; use them as a guide.</p>{% endif %}
 </div>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/app.js?v={{ v }}"></script>
+{% if view == 'own' and user %}
+<script type="application/json" id="report-data">{{ {"prompt": story_prompt | default(''), "blocks": blocks_for_stories} | tojson }}</script>
+<script type="module" src="/static/practice.js?v={{ v }}"></script>
+{% endif %}
+{% endblock %}

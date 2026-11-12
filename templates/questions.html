@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ total }} interview questions to practise out loud — {{ app_name }}{% endblock %}
+{% block description %}Common interview questions by type: behavioral, HR, recruiter screen, final round, salary negotiation, visa and IELTS speaking. See what a good answer shows, then practise each one with an AI interviewer.{% endblock %}
+{% block main %}
+<div class="wrap page">
+  <div class="page-head">
+    <h1>Interview questions</h1>
+    <p class="lede">{{ total }} questions interviewers really ask, grouped by the kind of interview. Reading them helps a little. Answering them out loud helps a lot.</p>
+  </div>
+
+  <nav class="chips" aria-label="Interview types" style="margin-bottom:2.5rem">
+    {% for p in packs %}<a class="chip" href="#{{ p.slug }}">{{ p.title }} <small>{{ p.questions | length }}</small></a>{% endfor %}
+  </nav>
+
+  {% for p in packs %}
+  <section class="qsection" id="{{ p.slug }}">
+    <div class="qsection-head">
+      <div>
+        <h2>{{ p.title }} {% if p.pro %}<span class="tag tag-pro">Pro, first try free</span>{% endif %}</h2>
+        <p class="muted">{{ p.summary }}</p>
+      </div>
+      <a class="btn btn-primary" href="/app/new?pack={{ p.slug }}">Practise this interview</a>
+    </div>
+    <div class="split" style="align-items:start">
+      <ol class="qlist">
+        {% for q in p.questions %}
+        <li><span>{{ q }}</span><a class="small" href="/app/new?pack={{ p.slug }}&ask={{ q | urlencode }}">Practise</a></li>
+        {% endfor %}
+      </ol>
+      <div class="panel panel-mist">
+        <h3>What a good answer shows</h3>
+        <dl class="looks">
+          {% for r in p.rubric %}<dt>{{ r.label }}</dt><dd>{{ r.hint }}</dd>{% endfor %}
+        </dl>
+        {% if p.note %}<p class="small faint" style="margin:1rem 0 0">{{ p.note }}</p>{% endif %}
+      </div>
+    </div>
+  </section>
+  {% endfor %}
+
+  <div class="cta-band" style="margin-top:3rem">
+    <div><h2>Questions about your own CV are better.</h2><p>Add your CV and the interviewer asks about your real projects.</p></div>
+    <a class="btn btn-big" href="/app/new">Start a free interview</a>
+  </div>
+</div>
+{% endblock %}

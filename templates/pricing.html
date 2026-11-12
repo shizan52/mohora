@@ -14,12 +14,13 @@
         <div class="price">0 <small>forever</small></div>
         <p class="muted small">Runs on your own AI account or a free key.</p>
         <ul>
-          <li>Unlimited interviews of every type</li>
+          <li>Unlimited job interviews of seven types</li>
           <li>Questions from your CV and the job post</li>
           <li>Video call, voice and text modes</li>
           <li>Two interviewers to choose from</li>
           <li>Marked-up feedback, rewrites and redo</li>
-          <li>Reports saved to your account</li>
+          <li>Readiness score, daily plan and review drills</li>
+          <li>Five saved stories, and one free try of every Pro interview</li>
         </ul>
         <a class="btn btn-block" href="/app/new">Start practising</a>
       </div>
@@ -30,8 +31,8 @@
         <ul>
           <li>Everything in Free</li>
           <li>The whole hiring process: online application, recruiter call, role interview, behavioral round and final round, in order</li>
-          <li>Pick the stages you need and skip the rest</li>
-          <li>Helps keep this site running</li>
+          <li>Specialist interviews: salary negotiation, US student visa (F-1), IELTS speaking and viva board</li>
+          <li>As many saved stories as you like</li>
         </ul>
         <a class="btn btn-primary btn-block" href="{{ '/pay' if user else '/login?next=/pay' }}">{{ 'Extend Pro' if user and user.has_pass else 'Get Pro' }}</a>
       </div>

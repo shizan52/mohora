@@ -1,46 +1,105 @@
 {% extends "base.html" %}
-{% set nav = 'home' %}
 {% block title %}Practice — {{ app_name }}{% endblock %}
 {% block main %}
+{% set today = plan[0] if plan else none %}
 <div class="wrap page">
-  <div class="page-head">
-    <h1>Hello, {{ user.first_name }}.</h1>
-    {% if goal.role %}
-    <p class="lede">Preparing for {{ goal.role }}{% if days_left is not none and days_left >= 0 %}: {{ 'the interview is today' if days_left == 0 else days_left ~ ' day' ~ ('s' if days_left != 1) ~ ' to go' }}{% endif %}.</p>
-    {% endif %}
+  <div class="page-head spread">
+    <div>
+      <h1>Hello, {{ user.first_name }}.</h1>
+      <p class="lede" style="margin:0">
+        {% if goal.role %}Preparing for {{ goal.role }}{% if days_left is not none and days_left >= 0 %}: {{ 'the interview is today' if days_left == 0 else days_left ~ ' day' ~ ('s' if days_left != 1) ~ ' to go' }}{% endif %}.
+        {% else %}Tell us what you're preparing for and we'll plan your practice.{% endif %}
+      </p>
+      {% if days_left is not none and days_left < 0 %}<p class="small muted" style="margin:.4rem 0 0">Your interview date has passed. Set the next one when you have it.</p>{% endif %}
+    </div>
+    <button class="btn btn-small" type="button" data-open-goal>{{ 'Change goal' if goal.role else 'Set a goal' }}</button>
   </div>
 
-  <div class="dash">
-    <div class="stack" style="--gap:2.5rem">
-      {% if unfinished %}
-      <p class="note" style="margin:0">You left an interview halfway. <a href="/app/room/{{ unfinished.id }}">Pick it up</a> if it's still open in this browser.</p>
-      {% endif %}
+  {% if unfinished %}
+  <p class="note" style="margin:0 0 1.5rem">You left an interview halfway. <a href="/app/room/{{ unfinished.id }}">Pick it up</a> if it's still open in this browser.</p>
+  {% endif %}
 
-      {% set p = packs.get(suggest) %}
-      {% if p %}
-      <div class="cue next-card">
-        <div class="cue-label"><span>{{ 'Suggested next' if total else 'Your first interview' }}</span><span>{{ p.minutes }} min</span></div>
-        <h2>{{ p.title }}{% if goal.role %} for {{ goal.role }}{% endif %}</h2>
-        <p class="muted">{{ p.summary }}</p>
-        <div class="row">
-          <a class="btn btn-primary btn-big" href="/app/new?pack={{ p.slug }}">Set it up</a>
-          <a class="btn" href="/app/new">Choose something else</a>
+  <div class="dash">
+    <div class="stack" style="--gap:2rem">
+      <section class="today">
+        <p class="today-label">{{ 'Today' if total else 'Your first interview' }}</p>
+        {% if done_today and today and today.kind == 'interview' %}
+          <h2>Done for today.</h2>
+          <p>You've practised today, and that's enough to keep moving.{% if plan | length > 1 %} Tomorrow: {{ plan[1].title }}.{% endif %}</p>
+          <div class="row">
+            <a class="btn" href="/app/new">Do another interview</a>
+            <a class="btn" href="/app/stories">Read my stories</a>
+          </div>
+        {% elif today and today.kind == 'interview' %}
+          <h2>{{ today.title }}{% if goal.role %} for {{ goal.role }}{% endif %}</h2>
+          <p>{{ packs[today.pack].summary }} {{ today.note }}.</p>
+          <div class="row">
+            <a class="btn btn-primary btn-big" href="/app/new?pack={{ today.pack }}">Set it up</a>
+            <a class="btn" href="/app/new">Choose something else</a>
+          </div>
+        {% elif today %}
+          <h2>{{ today.title }}</h2>
+          <p>{{ today.note }}</p>
+          <div class="row">
+            {% if tracked %}<button class="btn btn-primary btn-big" type="button" data-drill>Start the warm-up</button>{% endif %}
+            <a class="btn" href="/app/stories">Read my stories</a>
+            <a class="btn" href="/app/new">Do a full interview</a>
+          </div>
+        {% else %}
+          <h2>Start an interview</h2>
+          <div class="row"><a class="btn btn-primary btn-big" href="/app/new">Set it up</a></div>
+        {% endif %}
+        {% if tracked and (not today or today.kind == 'interview') %}
+        <div class="today-extra">
+          <span>{% if due %}<b>{{ due }} weak answer{{ 's' if due != 1 }}</b> {{ 'are' if due != 1 else 'is' }} due for another try.{% else %}{{ tracked }} weak answer{{ 's' if tracked != 1 }} in your review list, none due today.{% endif %}</span>
+          <button class="btn btn-small" type="button" data-drill>{{ 'Start a 5-minute drill' if due else 'Drill them anyway' }}</button>
         </div>
-      </div>
+        {% endif %}
+      </section>
+
+      {% if total %}
+      <section class="panel">
+        <div class="ready">
+          <div class="ready-score" aria-label="Readiness {{ ready.score }} out of 100">{{ ready.score }}<small>/ 100 ready</small></div>
+          <div class="ready-parts">
+            {% for part in ready.parts %}
+            <div>
+              <div class="spread small"><b>{{ part.label }}</b><span class="num muted">{{ part.value }} / {{ part.max }}</span></div>
+              <div class="bar{% if part.value / part.max < 0.4 %} low{% elif part.value / part.max >= 0.8 %} high{% endif %}"><i style="--v:{{ (part.value / part.max * 5) | round(2) }}"></i></div>
+              <p class="small faint" style="margin:.25rem 0 0">{{ part.note }}</p>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      {% if skills %}
+      <section>
+        <div class="spread">
+          <h2 style="margin:0;font-size:1.5rem">Your skills, weakest first</h2>
+          {% if spark %}<svg class="spark" viewBox="0 0 160 36" role="img" aria-label="Your scores over time"><polyline points="{{ spark }}"/></svg>{% endif %}
+        </div>
+        <div class="rubric" style="margin-top:1rem">
+          {% for row in skills %}
+          <span>{{ row.label }}</span>
+          <div class="bar{% if row.avg <= 2.5 %} low{% elif row.avg >= 4 %} high{% endif %}"><i style="--v:{{ row.avg }}"></i></div>
+          <span class="num">{{ row.avg }}</span>
+          {% endfor %}
+        </div>
+        <p class="small faint" style="margin-top:.7rem">Averages over your last interviews. Next time, set “Anything to focus on?” to the top line.</p>
+      </section>
+      {% endif %}
       {% endif %}
 
       <section>
-        <div class="spread">
-          <h2 style="margin:0;font-size:1.7rem">Recent interviews</h2>
-          {% if spark %}<svg class="spark" viewBox="0 0 160 36" role="img" aria-label="Your scores over time"><polyline points="{{ spark }}"/></svg>{% endif %}
-        </div>
+        <h2 style="font-size:1.5rem">Recent interviews</h2>
         {% if sessions %}
-        <ul class="list" style="margin-top:1rem">
+        <ul class="list">
           {% for s in sessions %}
           <li>
             <div>
               <b>{{ packs[s.pack_slug].title if s.pack_slug in packs else s.pack_slug }}</b>
-              <span class="muted">for {{ s.config.role }}</span>
+              <span class="muted">for {{ s.config.role }}</span>{% if s.config.drill %} <span class="tag">drill</span>{% endif %}
               <div class="small faint">{{ s.started_at | ago }}, {{ s.duration_s // 60 }} min</div>
             </div>
             <div class="row">
@@ -51,8 +110,9 @@
           {% endfor %}
         </ul>
         {% else %}
-        <div class="empty" style="margin-top:1rem">
-          <p style="margin:0">No interviews yet. The first one takes about ten minutes, and you get your answers back marked up at the end.</p>
+        <div class="empty">
+          <p style="margin:0 0 .8rem">No interviews yet. The first one takes about ten minutes, and you get your answers back marked up at the end.</p>
+          <a href="/sample">See what a report looks like</a>
         </div>
         {% endif %}
       </section>
@@ -60,11 +120,42 @@
 
     <aside class="stack">
       <div class="panel" id="ai-status"></div>
-      {% if total %}
+
+      {% if plan %}
       <div class="panel">
-        <p style="margin:0">{{ total }} interview{{ 's' if total != 1 }} finished{% if this_week %}, {{ this_week }} this week{% endif %}.{% if recent_avg %} Your recent average is {{ recent_avg }} out of 5.{% endif %}</p>
+        <div class="spread" style="margin-bottom:.6rem"><h3 style="margin:0">Your plan</h3><a class="small" href="/app/plan.ics">Add to calendar</a></div>
+        <ol class="plan-days">
+          {% for item in plan %}
+          <li {% if loop.first %}class="now"{% endif %}>
+            <span class="plan-day">{{ 'Today' if loop.first else item.day.strftime('%a') ~ ' ' ~ item.day.day }}</span>
+            <span>{% if item.kind == 'interview' %}<a href="/app/new?pack={{ item.pack }}">{{ item.title }}</a>{% else %}<b>{{ item.title }}</b>{% endif %}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% if not goal.date %}<p class="small faint" style="margin:.7rem 0 0">Add your interview date and the plan counts down to it.</p>{% endif %}
       </div>
       {% endif %}
+
+      {% if total %}
+      <div class="panel">
+        <h3>This week</h3>
+        <div class="spread small"><span>{{ this_week }} of 3 interviews</span>{% if streak > 1 %}<span class="tag tag-you">{{ streak }} weeks in a row</span>{% endif %}</div>
+        <div class="bar{% if this_week >= 3 %} high{% endif %}" style="margin-top:.5rem"><i style="--v:{{ [this_week, 3] | min / 3 * 5 }}"></i></div>
+      </div>
+      {% endif %}
+
+      <div class="panel">
+        <h3>Stories</h3>
+        <p class="small muted" style="margin:0 0 .7rem">{% if story_count %}You've saved {{ story_count }} stor{{ 'ies' if story_count != 1 else 'y' }}. Read them before the real interview.{% else %}Keep your best answers as STAR stories and reuse them in any interview.{% endif %}</p>
+        <a class="btn btn-small" href="/app/stories">{{ 'Open my stories' if story_count else 'Start a story bank' }}</a>
+      </div>
+
+      <div class="panel">
+        <h3>Give {{ referral_days }} days of Pro, get {{ referral_days }}</h3>
+        <p class="small muted" style="margin:0 0 .7rem">When a friend signs up with your link and finishes an interview, you both get {{ referral_days }} days of Pro.{% if referred %} {{ referred }} friend{{ 's' if referred != 1 }} so far.{% endif %}</p>
+        <div class="copy-field"><input id="ref-link" type="text" readonly value="{{ referral_url }}" aria-label="Your invite link"><button class="btn btn-small" type="button" data-copy="#ref-link">Copy</button></div>
+      </div>
+
       <div class="panel">
         <h3>Something not right?</h3>
         <form id="feedback-form" class="stack" style="--gap:.7rem">
@@ -83,5 +174,31 @@
     </aside>
   </div>
 </div>
+
+<dialog id="goal-dialog" aria-labelledby="goal-title">
+  <div class="dialog-head">
+    <h2 id="goal-title">What are you preparing for?</h2>
+    <form method="dialog"><button class="btn btn-quiet btn-small">Close</button></form>
+  </div>
+  <form id="goal-edit" class="stack" style="--gap:1.1rem">
+    <div><label for="goal-role">Job title</label><input id="goal-role" name="role" type="text" maxlength="120" required value="{{ goal.role or '' }}" placeholder="For example: Junior Data Analyst"></div>
+    <div class="grid-2">
+      <div>
+        <label for="goal-level">Level</label>
+        <select id="goal-level" name="level">
+          {% for value, label in [('intern', 'Internship'), ('fresher', 'Fresh graduate'), ('junior', 'Junior'), ('mid', 'Mid-level'), ('senior', 'Senior'), ('lead', 'Lead or manager')] %}
+          <option value="{{ value }}" {% if (goal.level or 'junior') == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label for="goal-date">Interview date <span class="faint">(if you know it)</span></label><input id="goal-date" name="date" type="date" value="{{ goal.date or '' }}"></div>
+    </div>
+    <div><button class="btn btn-primary" type="submit">Save goal</button></div>
+  </form>
+</dialog>
+<script type="application/json" id="practice-data">{{ {"goal": goal} | tojson }}</script>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/app.js?v={{ v }}"></script>{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/app.js?v={{ v }}"></script>
+<script type="module" src="/static/practice.js?v={{ v }}"></script>
+{% endblock %}

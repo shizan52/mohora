@@ -117,6 +117,8 @@ def sign_in(
         if not site_flags(db)["signups_open"]:
             return RedirectResponse("/login?error=closed", 303)
         user = User(email=email, country=ctx["country"], source=ctx["source"][:80])
+        friend = db.scalar(select(User).where(User.referral_code == request.session.get("ref", "")))
+        user.referred_by = friend.id if friend else None
         db.add(user)
     elif user.status != "active":
         return RedirectResponse("/login?error=blocked", 303)

@@ -1,8 +1,8 @@
+import asyncio
 import logging
 import time
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import admin, auth, billing, notify
+from . import admin, auth, billing, notify, practice
 from .auth import LoginRequired, current_user, guest_token, require_user
 from .config import ROOT, config
 from .db import (
@@ -26,6 +26,7 @@ from .db import (
     Pack,
     SessionLocal,
     User,
+    active_packs,
     billing_settings,
     cached_flags,
     get_db,
@@ -42,7 +43,10 @@ log = logging.getLogger("mohora")
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
+    digest = asyncio.create_task(notify.digest_loop()) if config.telegram_enabled else None
     yield
+    if digest:
+        digest.cancel()
 
 
 app = FastAPI(title=config.app_name, lifespan=lifespan, docs_url=None, redoc_url=None)
@@ -50,6 +54,7 @@ app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(billing.router)
+app.include_router(practice.router)
 
 # Browser code calls AI providers directly, so connect-src has to allow any HTTPS
 # host (custom OpenAI-compatible URLs) and localhost (Ollama, LM Studio).
@@ -121,10 +126,12 @@ app.add_middleware(
 
 def remember_source(request: Request) -> None:
     """First-touch attribution, shown to the admin when the visitor signs up."""
+    q = request.query_params
+    if q.get("ref"):
+        request.session["ref"] = q["ref"][:24]
     if "src" in request.session:
         return
-    q = request.query_params
-    source = q.get("utm_source") or q.get("ref")
+    source = q.get("utm_source") or ("a friend" if q.get("ref") else "")
     if not source:
         referer = urlparse(request.headers.get("referer", "")).hostname or ""
         if referer and referer != urlparse(config.base_url).hostname:
@@ -165,11 +172,6 @@ def client_ip(request: Request) -> str:
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "")
 
 
-def active_packs(db: Session) -> list[dict]:
-    rows = db.scalars(select(Pack).where(Pack.active).order_by(Pack.sort))
-    return [{**p.data, "slug": p.slug, "pro": p.pro} for p in rows]
-
-
 def owned_session(request: Request, db: Session, sid: int, user: User | None) -> InterviewSession:
     s = db.get(InterviewSession, sid)
     if s is not None:
@@ -178,14 +180,6 @@ def owned_session(request: Request, db: Session, sid: int, user: User | None) ->
         if s.user_id is None and s.guest_token and s.guest_token == request.session.get("guest"):
             return s
     raise HTTPException(404)
-
-
-def sparkline(values: list[float], width: int = 160, height: int = 36) -> str:
-    if len(values) < 2:
-        return ""
-    step = width / (len(values) - 1)
-    points = (f"{i * step:.1f},{height - (v - 1) / 4 * height:.1f}" for i, v in enumerate(values))
-    return " ".join(points)
 
 
 # ---------------------------------------------------------------- pages
@@ -229,40 +223,6 @@ def onboarding(request: Request, user: User = Depends(require_user), db: Session
     return render(request, "onboarding.html", user=user, packs=active_packs(db), flags=cached_flags())
 
 
-@app.get("/app")
-def dashboard(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    done = list(db.scalars(
-        select(InterviewSession)
-        .where(InterviewSession.user_id == user.id, InterviewSession.status == "completed")
-        .order_by(InterviewSession.started_at.desc()).limit(12)
-    ))
-    unfinished = db.scalar(
-        select(InterviewSession)
-        .where(InterviewSession.user_id == user.id, InterviewSession.status == "active",
-               InterviewSession.started_at >= utcnow() - timedelta(days=2))
-        .order_by(InterviewSession.started_at.desc())
-    )
-    week = utcnow() - timedelta(days=7)
-    scores = [s.overall for s in reversed(done) if s.overall]
-    packs = {p["slug"]: p for p in active_packs(db)}
-    goal = user.goal or {}
-    days_left = None
-    try:
-        days_left = (date.fromisoformat(goal.get("date", "")) - utcnow().date()).days
-    except ValueError:
-        pass
-    suggest = goal.get("pack") if goal.get("pack") in packs else done[0].pack_slug if done else next(iter(packs), "")
-    return render(
-        request, "dashboard.html", user=user, sessions=done[:8], unfinished=unfinished, packs=packs,
-        goal=goal, days_left=days_left, suggest=suggest,
-        total=db.scalar(select(func.count(InterviewSession.id)).where(
-            InterviewSession.user_id == user.id, InterviewSession.status == "completed")) or 0,
-        this_week=sum(1 for s in done if s.started_at >= week),
-        recent_avg=round(sum(scores[-5:]) / len(scores[-5:]), 1) if scores else None,
-        spark=sparkline(scores),
-    )
-
-
 @app.get("/app/new")
 def new_interview(
     request: Request,
@@ -281,6 +241,7 @@ def new_interview(
         request, "setup.html", user=user, packs=active_packs(db), selected=pack, previous=previous,
         prompts=get_setting(db, "prompts"), journey=get_setting(db, "journey") or [],
         has_pass=bool(user and user.has_pass), flags=cached_flags(), nav="new",
+        tried=practice.tried_pro_packs(db, user),
     )
 
 
@@ -305,7 +266,9 @@ def report(request: Request, sid: int, user: User | None = Depends(current_user)
         titles = {stage["pack"]: stage["title"] for stage in get_setting(db, "journey") or []}
         next_stage = {"title": titles.get(slug, slug), "number": journey["index"] + 2, "total": len(journey["stages"])}
     return render(request, "report.html", user=user, session=s, r=s.report, next_stage=next_stage,
-                  pack=pack.data if pack else {"title": s.pack_slug})
+                  pack=pack.data if pack else {"title": s.pack_slug},
+                  story_prompt=(get_setting(db, "prompts") or {}).get("story", ""),
+                  blocks_for_stories=practice.story_sources(s.report))
 
 
 @app.get("/app/settings")
@@ -338,8 +301,15 @@ def create_session(
     pack = db.get(Pack, body.pack)
     if pack is None or not pack.active:
         raise HTTPException(404, "That interview type isn't available.")
-    if (pack.pro or body.config.get("journey")) and not (user and user.has_pass):
-        raise HTTPException(403, "This needs Pro. See the pricing page.")
+    if not (user and user.has_pass):
+        if body.config.get("journey"):
+            raise HTTPException(403, "The whole hiring process needs Pro. See the pricing page.")
+        if pack.pro and user is None:
+            raise HTTPException(403, "Sign in to try this interview type once for free.")
+        if pack.pro and db.scalar(select(func.count(InterviewSession.id)).where(
+                InterviewSession.user_id == user.id, InterviewSession.pack_slug == pack.slug,
+                InterviewSession.status == "completed")):
+            raise HTTPException(403, "You've used your free try of this interview type. Pro unlocks it.")
     if user is None:
         if not cached_flags().get("guest_mode"):
             raise LoginRequired
@@ -399,6 +369,7 @@ def update_session(
                 pack = db.get(Pack, s.pack_slug)
                 title = pack.data.get("title", s.pack_slug) if pack else s.pack_slug
                 background.add_task(notify.first_interview, notify.user_card(user), title, s.overall)
+            practice.after_interview(db, user, s)
     db.commit()
     return {"ok": True}
 
@@ -544,4 +515,5 @@ async def relay(body: RelayCall, request: Request):
 
 @app.get("/robots.txt")
 def robots():
-    return Response("User-agent: *\nDisallow: /app\nDisallow: /admin\nDisallow: /api\n", media_type="text/plain")
+    rules = f"User-agent: *\nDisallow: /app\nDisallow: /admin\nDisallow: /api\nSitemap: {config.base_url}/sitemap.xml\n"
+    return Response(rules, media_type="text/plain")

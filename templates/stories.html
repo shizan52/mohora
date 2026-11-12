@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Stories — {{ app_name }}{% endblock %}
+{% macro story_form(story=none) %}
+<form class="story panel" data-story="{{ story.id if story else '' }}" {% if not story %}id="new-story" hidden{% endif %}>
+  <div class="field">
+    <label>Title</label>
+    <input name="title" type="text" maxlength="200" required value="{{ story.title if story else '' }}" placeholder="For example: Payment timeout fix">
+  </div>
+  {% for field, label, hint in [
+    ('situation', 'Situation', 'Where and when was this? One or two sentences.'),
+    ('task', 'Task', 'What were you responsible for?'),
+    ('action', 'Action', 'What did you do, step by step? Start with “I”.'),
+    ('result', 'Result', 'What changed? Give a number if you can.')] %}
+  <div class="field">
+    <label>{{ label }}</label>
+    <textarea name="{{ field }}" maxlength="3000" placeholder="{{ hint }}">{{ story[field] if story else '' }}</textarea>
+  </div>
+  {% endfor %}
+  <div class="field">
+    <label>What it shows</label>
+    <div class="chips">
+      {% for c in competencies %}
+      <label class="chip"><input type="checkbox" name="tags" value="{{ c }}" {% if story and c in story.tags %}checked{% endif %}> {{ c }}</label>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="spread">
+    <div class="row">
+      <button class="btn btn-primary btn-small" type="submit">Save</button>
+      <button class="btn btn-small" type="button" data-improve>Tidy it into STAR with AI</button>
+      {% if story %}<a class="btn btn-small" href="/app/new?pack=behavioral-star&ask={{ ('Tell me about this: ' ~ story.title) | urlencode }}">Practise telling it</a>{% endif %}
+    </div>
+    {% if story %}<button class="btn btn-quiet btn-small" type="button" data-delete>Delete</button>{% endif %}
+  </div>
+  <p class="small" data-status role="status" style="margin:.6rem 0 0"></p>
+</form>
+{% endmacro %}
+{% block main %}
+<div class="narrow page">
+  <div class="page-head">
+    <h1>Your stories</h1>
+    <p class="lede">Most behavioral questions can be answered with six to eight good stories. Keep them here in STAR form and read them before the real interview.</p>
+  </div>
+
+  {% if missing and stories %}
+  <p class="note small">No story yet for: {% for c in missing %}<b>{{ c }}</b>{{ ', ' if not loop.last }}{% endfor %}. Interviewers ask about these often.</p>
+  {% endif %}
+
+  <div class="row" style="margin-bottom:1.5rem">
+    <button class="btn btn-primary" type="button" id="add-story">Add a story</button>
+    {% if not user.has_pass %}<span class="small faint">{{ stories | length }} of {{ free_limit }} on the free plan. <a href="/pricing">Pro</a> keeps as many as you like.</span>{% endif %}
+  </div>
+
+  <div class="stack" style="--gap:1.2rem">
+    {{ story_form() }}
+    {% for story in stories %}{{ story_form(story) }}{% endfor %}
+  </div>
+
+  {% if not stories %}
+  <div class="empty" id="no-stories">
+    <p style="margin:0 0 .5rem"><b>No stories yet.</b></p>
+    <p style="margin:0">Add one from scratch, or open a report and press “Save as a story” under any answer. Start with three: something you're proud of, something that went wrong, and a disagreement.</p>
+  </div>
+  {% endif %}
+</div>
+<script type="application/json" id="story-prompt">{{ prompt | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="/static/app.js?v={{ v }}"></script>
+<script type="module" src="/static/practice.js?v={{ v }}"></script>
+{% endblock %}

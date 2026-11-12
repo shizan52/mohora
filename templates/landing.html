@@ -8,7 +8,7 @@
       <p class="lede">Add your CV, pick the job, and talk to an interviewer on a video call. It follows up on what you actually said, then marks up every answer so you know exactly what to fix.</p>
       <div class="row">
         <a class="btn btn-primary btn-big" href="/app/new">Start a free interview</a>
-        {% if not user %}<a class="btn btn-big" href="/login">Sign in with Google</a>{% endif %}
+        <a class="btn btn-big" href="/sample">See a sample report</a>
       </div>
       <ul class="facts">
         <li>{{ icon('check') }} Free with your own AI</li>
@@ -102,6 +102,20 @@
   </div>
 </section>
 
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Built to get you ready by a date</h2>
+      <p class="muted">One mock interview doesn't change much. Coming back to the answers that went badly does.</p>
+    </div>
+    <div class="grid-3">
+      <div class="feature"><div class="ic">{{ icon('route') }}</div><h3>A plan and a readiness score</h3><p>Tell us your interview date. You get a short session for each day and a score out of 100 that shows exactly what would raise it.</p></div>
+      <div class="feature"><div class="ic">{{ icon('redo') }}</div><h3>Weak answers come back</h3><p>Any answer under 4 out of 5 returns in a five-minute drill after a day, then three, then seven, until you get it right three times.</p></div>
+      <div class="feature"><div class="ic">{{ icon('file') }}</div><h3>A bank of your stories</h3><p>Save your best answers as STAR stories, see which kinds you're missing, and read them the night before.</p></div>
+    </div>
+  </div>
+</section>
+
 <section class="section section-mist" id="types">
   <div class="wrap">
     <div class="section-head">
@@ -116,7 +130,7 @@
     <div class="packs" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
       {% for p in packs %}
       <a class="opt" href="/app/new?pack={{ p.slug }}" style="text-decoration:none;color:inherit">
-        <b>{{ p.title }} <small class="faint" style="font-weight:400">{{ p.minutes }} min</small></b>
+        <b>{{ p.title }} <small class="faint" style="font-weight:400">{% if p.pro %}<span class="tag tag-pro">Pro, first try free</span> {% endif %}{{ p.minutes }} min</small></b>
         <span>{{ p.summary }}</span>
       </a>
       {% endfor %}
@@ -169,13 +183,13 @@
       <div class="plan-card">
         <h3>Free</h3>
         <div class="price">0 <small>forever</small></div>
-        <ul><li>Unlimited interviews of every type</li><li>Questions from your CV and job post</li><li>Text, voice and video modes</li><li>Marked-up feedback and redo</li></ul>
+        <ul><li>Unlimited job interviews of seven types</li><li>Questions from your CV and job post</li><li>Text, voice and video modes</li><li>Marked-up feedback, drills and a prep plan</li></ul>
         <a class="btn btn-block" href="/app/new">Start practising</a>
       </div>
       <div class="plan-card featured">
         <h3>Pro</h3>
         <div class="price">{{ '%g' % billing.price_usdt }} USDT <small>for {{ billing.days }} days</small></div>
-        <ul><li>Everything in Free</li><li>The whole hiring process, step by step</li><li>Support the project</li></ul>
+        <ul><li>Everything in Free</li><li>Salary negotiation, US visa, IELTS speaking and viva board interviews</li><li>The whole hiring process, step by step</li><li>As many saved stories as you like</li></ul>
         <a class="btn btn-primary btn-block" href="/pricing">See Pro</a>
       </div>
     </div>

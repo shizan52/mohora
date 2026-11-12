@@ -8,6 +8,10 @@
 <meta name="csrf" content="{{ csrf }}">
 <meta name="application-name" content="{{ app_name }}">
 <meta name="theme-color" content="#ffffff">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ app_name }}">
+<meta property="og:title" content="{{ self.title() }}">
+<meta property="og:description" content="{{ self.description() }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,400..800&family=Caveat:wght@600&display=swap">
@@ -29,11 +33,12 @@
       {% if user %}
         <a href="/app" {% if nav == 'home' %}aria-current="page"{% endif %}>Practice</a>
         <a href="/app/new" {% if nav == 'new' %}aria-current="page"{% endif %}>New interview</a>
+        <a class="hide-sm" href="/app/stories" {% if nav == 'stories' %}aria-current="page"{% endif %}>Stories</a>
         <a class="hide-sm" href="/app/settings" {% if nav == 'settings' %}aria-current="page"{% endif %}>Settings</a>
         {% if user.is_admin %}<a class="hide-sm" href="/admin" {% if nav == 'admin' %}aria-current="page"{% endif %}>Admin</a>{% endif %}
       {% else %}
         <a class="hide-sm" href="/#how">How it works</a>
-        <a class="hide-sm" href="/#types">Interview types</a>
+        <a class="hide-sm" href="/questions" {% if nav == 'questions' %}aria-current="page"{% endif %}>Questions</a>
         <a href="/pricing" {% if nav == 'pricing' %}aria-current="page"{% endif %}>Pricing</a>
       {% endif %}
     </nav>
@@ -65,12 +70,12 @@
       </div>
       <div>
         <h4>Product</h4>
-        <ul><li><a href="/#how">How it works</a></li><li><a href="/#types">Interview types</a></li><li><a href="/#journey">Hiring process</a></li><li><a href="/pricing">Pricing</a></li></ul>
+        <ul><li><a href="/#how">How it works</a></li><li><a href="/#types">Interview types</a></li><li><a href="/questions">Interview questions</a></li><li><a href="/sample">Sample report</a></li><li><a href="/pricing">Pricing</a></li></ul>
       </div>
       <div>
         <h4>Your account</h4>
         <ul>
-          {% if user %}<li><a href="/app">Practice</a></li><li><a href="/app/settings">Settings</a></li>
+          {% if user %}<li><a href="/app">Practice</a></li><li><a href="/app/stories">Stories</a></li><li><a href="/app/settings">Settings</a></li>
           {% else %}<li><a href="/login">Sign in</a></li><li><a href="/app/new">Try without an account</a></li>{% endif %}
         </ul>
       </div>

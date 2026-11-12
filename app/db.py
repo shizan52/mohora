@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     event,
+    inspect,
     select,
     text,
 )
@@ -87,6 +88,37 @@ class InterviewSession(Base):
     metrics: Mapped[dict[str, Any]] = mapped_column(default=dict)
     transcript: Mapped[list[Any] | None] = mapped_column()
     report: Mapped[dict[str, Any] | None] = mapped_column()
+    share_slug: Mapped[str | None] = mapped_column(String(24), unique=True)
+
+
+class ReviewItem(Base):
+    """A question the user answered weakly, scheduled to come back until it lands."""
+
+    __tablename__ = "review_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    question: Mapped[str] = mapped_column(Text)
+    pack_slug: Mapped[str] = mapped_column(String(64))
+    last_score: Mapped[float] = mapped_column(Float, default=0)
+    interval_days: Mapped[int] = mapped_column(Integer, default=1)
+    reps: Mapped[int] = mapped_column(Integer, default=0)
+    due_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Story(Base):
+    __tablename__ = "stories"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    situation: Mapped[str] = mapped_column(Text, default="")
+    task: Mapped[str] = mapped_column(Text, default="")
+    action: Mapped[str] = mapped_column(Text, default="")
+    result: Mapped[str] = mapped_column(Text, default="")
+    tags: Mapped[list[Any]] = mapped_column(default=list)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Pack(Base):
@@ -179,7 +211,10 @@ def get_db() -> Iterator[Session]:
 
 # Schema changes after the first release go here, in order. create_all() only adds
 # missing tables; columns added to existing tables need an ALTER step.
-MIGRATIONS: list[str] = []
+MIGRATIONS: list[str] = [
+    "ALTER TABLE sessions ADD COLUMN share_slug VARCHAR(24)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_sessions_share_slug ON sessions (share_slug)",
+]
 
 DEFAULT_FLAGS: dict[str, Any] = {
     "signups_open": True,
@@ -197,9 +232,11 @@ PACKS_FILE = ROOT / "app" / "packs.json"
 
 def init_db() -> None:
     config.db_path.parent.mkdir(parents=True, exist_ok=True)
+    # A brand-new database gets every column from create_all, so it starts fully migrated.
+    fresh = not inspect(engine).has_table("users")
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
-        version = conn.execute(text("PRAGMA user_version")).scalar() or 0
+        version = len(MIGRATIONS) if fresh else conn.execute(text("PRAGMA user_version")).scalar() or 0
         for step in MIGRATIONS[version:]:
             conn.execute(text(step))
         conn.execute(text(f"PRAGMA user_version = {len(MIGRATIONS)}"))
@@ -210,17 +247,28 @@ def init_db() -> None:
 def seed(db: Session) -> None:
     """Add packs, prompts and settings that don't exist yet. Admin edits are never overwritten."""
     data = json.loads(PACKS_FILE.read_text(encoding="utf-8"))
-    existing = set(db.scalars(select(Pack.slug)))
+    existing = {row.slug: row for row in db.scalars(select(Pack))}
     for i, pack in enumerate(data["packs"]):
-        if pack["slug"] not in existing:
+        row = existing.get(pack["slug"])
+        if row is None:
             db.add(Pack(slug=pack["slug"], data=pack, pro=pack.get("pro", False), sort=i))
+        elif pack.keys() - row.data.keys():
+            # A newer version of the app added fields to this type: fill them in, keep the rest.
+            row.data = {**pack, **row.data}
     prompts = get_setting(db, "prompts") or {}
     missing = {k: v for k, v in data["prompts"].items() if k not in prompts}
     if missing or not prompts:
         set_setting(db, "prompts", {**prompts, **missing})
     if get_setting(db, "journey") is None:
         set_setting(db, "journey", data["journey"])
+    if get_setting(db, "digest_date") is None:
+        set_setting(db, "digest_date", "")
     db.commit()
+
+
+def active_packs(db: Session) -> list[dict]:
+    rows = db.scalars(select(Pack).where(Pack.active).order_by(Pack.sort))
+    return [{**p.data, "slug": p.slug, "pro": p.pro} for p in rows]
 
 
 def get_setting(db: Session, key: str, default: Any = None) -> Any:

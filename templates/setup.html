@@ -53,6 +53,7 @@
           <datalist id="role-list">
             {% for r in ['Software Engineer', 'Frontend Developer', 'Backend Developer', 'Data Analyst', 'Data Scientist', 'Product Manager', 'UI/UX Designer', 'Digital Marketing Executive', 'Business Analyst', 'Accountant', 'Customer Support Executive', 'Sales Executive', 'HR Executive', 'Project Manager', 'Teacher'] %}<option value="{{ r }}">{% endfor %}
           </datalist>
+          <p class="hint" id="role-hint" hidden></p>
           <div class="chips" id="role-chips" style="margin-top:.6rem"></div>
         </div>
         <div class="field">
@@ -90,10 +91,15 @@
           {% for p in packs %}
           <label>
             <input type="radio" name="pack" value="{{ p.slug }}" {% if loop.first %}checked{% endif %}>
-            <span class="opt"><b>{{ p.title }} <small class="faint" style="font-weight:400">{{ p.minutes }} min</small></b><span>{{ p.summary }}</span></span>
+            <span class="opt"><b>{{ p.title }} <small class="faint" style="font-weight:400">{% if p.pro %}<span class="tag tag-pro">Pro</span> {% endif %}{{ p.minutes }} min</small></b><span>{{ p.summary }}{% if p.pro and not has_pass %} <i class="faint">First try is free.</i>{% endif %}</span></span>
           </label>
           {% endfor %}
         </div>
+        <div class="field" id="subject-field" hidden>
+          <label for="subject" id="subject-label"></label>
+          <input id="subject" name="subject" type="text" maxlength="120">
+        </div>
+        <p class="note small" id="pack-note" hidden style="margin-top:1rem"></p>
         <div id="scope-journey" hidden>
           <p class="muted">Start from the online application, or skip straight to the interviews. Each step is its own short session with its own report, and the next one is ready when you finish.</p>
           <ol class="stages">
@@ -201,6 +207,6 @@
     </form>
   </div>
 </div>
-<script type="application/json" id="setup-data">{{ {"packs": packs, "prompts": prompts, "journey": journey, "selected": selected, "previous": previous, "has_pass": has_pass, "signed_in": user is not none, "role": request.query_params.get('role', ''), "journey_param": request.query_params.get('journey', '')} | tojson }}</script>
+<script type="application/json" id="setup-data">{{ {"packs": packs, "prompts": prompts, "journey": journey, "selected": selected, "previous": previous, "has_pass": has_pass, "signed_in": user is not none, "role": request.query_params.get('role', ''), "journey_param": request.query_params.get('journey', ''), "ask": request.query_params.get('ask', '')[:300], "tried": tried} | tojson }}</script>
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/setup.js?v={{ v }}"></script>{% endblock %}
