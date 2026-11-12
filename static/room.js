@@ -26,7 +26,7 @@ export const LANGS = {
   },
 };
 export const MAX_FOLLOWUPS = { easy: 1, normal: 1, hard: 2 };
-export const SOURCE_LABEL = { opener: 'opener', cv: 'from your CV', jd: 'from the job post', role: 'for the role', you: 'your question' };
+export const SOURCE_LABEL = { opener: 'opener', cv: 'from your CV', jd: 'from the job post', role: 'for the role', you: 'your question', review: 'review' };
 export const TALK = {
   video: { ask: 'voice', input: 'voice', camera: true, label: 'Video call' },
   voice: { ask: 'voice', input: 'voice', camera: false, label: 'Voice call' },
@@ -51,7 +51,7 @@ export function promptVars(run) {
     interviewer_role: p.interviewer.role,
     company_part: o.company ? ` at ${o.company}` : '',
     target_role: o.role,
-    level: LEVELS[o.level] || o.level,
+    level: p.about?.level || LEVELS[o.level] || o.level,
     pack_title: p.title,
     pack_brief: p.brief,
     persona: PERSONAS[o.persona] || PERSONAS.neutral,
@@ -501,6 +501,12 @@ function roomPage() {
 
   // ---------------------------------------------------------- feedback
 
+  // Generic feedback is the main complaint about interview tools, so for structured answers
+  // the coach must also say which named parts (Situation, Task, Action, Result) were there.
+  const partsRule = pack.parts
+    ? `\n\nAlso add "parts" to the JSON: {${pack.parts.map((name) => `"${name}": true or false`).join(', ')}}. A part is true only if the candidate clearly covered it.`
+    : '';
+
   function normalizeEval(data) {
     if (!data || typeof data !== 'object') return null;
     const scores = {};
@@ -518,6 +524,9 @@ function roomPage() {
     return {
       scores, overall: round1(mean(values)), worked: list(data.worked, 2), improve: list(data.improve, 2),
       fix_next: String(data.fix_next || ''), quotes, rewrite: String(data.rewrite || ''),
+      parts: pack.parts && data.parts && typeof data.parts === 'object'
+        ? Object.fromEntries(pack.parts.map((name) => [name, data.parts[name] === true || data.parts[name] === 'true']))
+        : null,
     };
   }
 
@@ -531,7 +540,7 @@ function roomPage() {
       question: block.q,
       transcript,
       score_shape: `{${pack.rubric.map((r) => `"${r.id}": 1-5`).join(', ')}}`,
-    });
+    }) + partsRule;
     const promise = ask('coach', [{ role: 'user', content: prompt }], { json: true, maxTokens: 1300, temperature: 0.3 })
       .then((raw) => {
         const result = normalizeEval(parseJSON(raw));
@@ -578,6 +587,7 @@ function roomPage() {
       el('div', { class: 'spread' }, el('h2', { style: 'margin:0' }, `Question ${i + 1}`), el('span', { class: 'score' }, result.overall, el('small', {}, ' / 5'))),
       el('p', { class: 'muted small', style: 'margin:.3rem 0 1rem' }, block.q),
       el('div', { class: 'rubric' }, bars.flat()),
+      result.parts ? el('div', { class: 'parts' }, Object.entries(result.parts).map(([name, ok]) => el('span', { class: ok ? 'part ok' : 'part miss' }, ok ? name : `${name} missing`))) : '',
       result.worked.length ? el('div', { style: 'margin-top:1.1rem' }, el('b', {}, 'What worked'), el('ul', {}, result.worked.map((w) => el('li', {}, w)))) : '',
       result.improve.length ? el('div', {}, el('b', {}, 'What to improve'), el('ul', {}, result.improve.map((w) => el('li', {}, w)))) : '',
       result.fix_next ? el('p', { class: 'pen' }, result.fix_next) : '',
