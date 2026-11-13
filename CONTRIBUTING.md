@@ -14,7 +14,7 @@ Python 3.12 or newer. Without Google credentials the sign-in page offers an emai
 ## Before opening a pull request
 
 - `python run.py check` passes.
-- The change works in a real browser if it touches `static/` or `templates/`. For the interview room, a fake AI that speaks the OpenAI chat format is enough to try a whole interview.
+- The change works in a real browser if it touches `static/` or `templates/`. `python tests/fake_ai.py` starts a fake AI on `http://127.0.0.1:8799/v1`; connect **Other server** to it (any key) and a whole interview runs offline, voice and transcription included.
 - New behaviour has a test in `tests/test_app.py`.
 - Site text is English, in plain sentences. No marketing filler.
 
@@ -29,6 +29,7 @@ Python 3.12 or newer. Without Google credentials the sign-in page offers an emai
 | Payments | `app/billing.py` |
 | Review drills, readiness score, plan, stories | `app/practice.py` |
 | The built-in GPU AI | `app/house.py` |
+| Deploying | `Dockerfile`, `docker-compose.yml`, `docs/deploy.md` |
 
 ## Adding an interview type
 
