@@ -1,7 +1,9 @@
 import json
+import os
 import secrets
 import time
 from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
@@ -230,18 +232,38 @@ DEFAULT_BILLING: dict[str, Any] = {"price_usdt": 1, "days": 30, "trc20_address":
 PACKS_FILE = ROOT / "app" / "packs.json"
 
 
+@contextmanager
+def startup_lock():
+    """One process at a time sets up the database. Several workers start together in production."""
+    handle = open(config.db_path.with_name(config.db_path.name + ".lock"), "a+b")  # noqa: SIM115
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+    finally:
+        handle.close()  # closing the file releases the lock
+
+
 def init_db() -> None:
     config.db_path.parent.mkdir(parents=True, exist_ok=True)
-    # A brand-new database gets every column from create_all, so it starts fully migrated.
-    fresh = not inspect(engine).has_table("users")
-    Base.metadata.create_all(engine)
-    with engine.begin() as conn:
-        version = len(MIGRATIONS) if fresh else conn.execute(text("PRAGMA user_version")).scalar() or 0
-        for step in MIGRATIONS[version:]:
-            conn.execute(text(step))
-        conn.execute(text(f"PRAGMA user_version = {len(MIGRATIONS)}"))
-    with SessionLocal() as db:
-        seed(db)
+    with startup_lock():
+        # A brand-new database gets every column from create_all, so it starts fully migrated.
+        fresh = not inspect(engine).has_table("users")
+        Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            version = len(MIGRATIONS) if fresh else conn.execute(text("PRAGMA user_version")).scalar() or 0
+            for step in MIGRATIONS[version:]:
+                conn.execute(text(step))
+            conn.execute(text(f"PRAGMA user_version = {len(MIGRATIONS)}"))
+        with SessionLocal() as db:
+            seed(db)
 
 
 def seed(db: Session) -> None:

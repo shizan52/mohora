@@ -8,6 +8,7 @@
     python run.py tg-test      send a Telegram test message and show chat ids
     python run.py admin EMAIL  make an existing user an admin
     python run.py backup       copy the database into backups/
+    python run.py health       exit 0 if a running server answers (used by Docker)
     python run.py deploy       print a systemd unit and Caddy config for BASE_URL
 
 Uses only the standard library, so it works before anything is installed.
@@ -33,6 +34,12 @@ VENV = ROOT / ".venv"
 VENV_PY = VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 ENV_FILE = ROOT / ".env"
 KEEP_BACKUPS = 14
+# Settings that may come from the environment (containers) as well as from .env.
+KNOWN_KEYS = (
+    "APP_NAME", "BASE_URL", "SECRET_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "ADMIN_EMAILS",
+    "TELEGRAM_BOT_TOKEN", "TELEGRAM_ADMIN_CHAT_ID", "TELEGRAM_WEBHOOK_SECRET", "DB_PATH", "BACKUP_DIR",
+    "TZ", "PORT", "WORKERS",
+)
 
 
 def say(message: str) -> None:
@@ -47,7 +54,7 @@ def read_env() -> dict[str, str]:
             if line and not line.startswith("#") and "=" in line:
                 key, value = line.split("=", 1)
                 values[key.strip()] = value.strip().strip("'\"")
-    return {**values, **{k: v for k, v in os.environ.items() if k in values}}
+    return {**values, **{k: os.environ[k] for k in KNOWN_KEYS if k in os.environ}}
 
 
 def in_venv() -> bool:
@@ -80,7 +87,7 @@ def setup() -> None:
         venv.create(VENV, with_pip=True)
     say("Installing packages (the first time takes a minute)")
     subprocess.check_call([str(VENV_PY), "-m", "pip", "install", "-q", "--disable-pip-version-check",
-                           "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
+                           "-r", str(ROOT / "requirements-dev.txt")], cwd=ROOT)
 
     if not ENV_FILE.exists():
         say("Writing .env. Press Enter to skip anything you don't have yet.")
@@ -209,14 +216,28 @@ def database_path() -> Path:
 
 def backup() -> None:
     source = database_path()
-    folder = ROOT / "backups"
-    folder.mkdir(exist_ok=True)
+    folder = Path(read_env().get("BACKUP_DIR", "backups"))
+    folder = folder if folder.is_absolute() else ROOT / folder
+    folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"app-{datetime.now():%Y%m%d-%H%M%S}.db"
-    with sqlite3.connect(source) as src, sqlite3.connect(target) as dst:
+    src, dst = sqlite3.connect(source), sqlite3.connect(target)
+    try:
         src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
     for old in sorted(folder.glob("app-*.db"))[:-KEEP_BACKUPS]:
         old.unlink()
-    say(f"Saved {target.relative_to(ROOT)}")
+    say(f"Saved {target}")
+
+
+def health() -> None:
+    port = read_env().get("PORT", "8000")
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=4) as resp:
+            sys.exit(0 if resp.status == 200 else 1)
+    except OSError:
+        sys.exit(1)
 
 
 def deploy() -> None:
@@ -259,7 +280,7 @@ WantedBy=multi-user.target
 
 
 COMMANDS = {"setup": setup, "dev": dev, "prod": prod, "check": check, "tg-test": tg_test,
-            "backup": backup, "deploy": deploy}
+            "backup": backup, "health": health, "deploy": deploy}
 
 
 def main() -> None:

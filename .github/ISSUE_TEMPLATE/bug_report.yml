@@ -1,0 +1,22 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where were you
+      description: Browser and version, or "Docker" / "run.py", and which page.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or console errors
+      description: "Docker: `docker compose logs app`. Browser: the Console tab. Remove keys and email addresses first."
+      render: shell

@@ -1,0 +1,134 @@
+# Mohora, ready to run.
+#
+#   docker compose up -d --build                  the site with automatic HTTPS
+#   docker compose --profile gpu up -d --build    the same, plus an AI, a voice and speech recognition on your GPU
+#
+# Read docs/deploy.md first: it covers DNS, sign-in, and the settings in .env.
+
+name: mohora
+
+x-mohora: &mohora
+  build: .
+  image: ghcr.io/shizan52/mohora:latest
+  env_file: .env
+  environment:
+    # Always inside the volume, whatever .env says.
+    DB_PATH: /data/app.db
+    BACKUP_DIR: /data/backups
+  volumes:
+    - data:/data
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *mohora
+    # Bound to this machine only. The public way in is Caddy below, or your own proxy.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # A consistent copy of the database when it starts and then every day; the last 14 are kept in the data volume.
+  backup:
+    <<: *mohora
+    ports: []
+    healthcheck:
+      disable: true
+    command: ["sh", "-c", "while true; do python run.py backup; sleep 86400; done"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------- GPU profile
+  # Needs an NVIDIA GPU, the driver and the NVIDIA Container Toolkit (docs/gpu.md).
+  # Then set HOUSE_AI_URL, HOUSE_TTS_URL and HOUSE_STT_URL in .env as .env.example shows.
+
+  llm:
+    profiles: [gpu]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-4}
+      OLLAMA_MAX_LOADED_MODELS: 2
+      OLLAMA_KEEP_ALIVE: 24h
+    volumes:
+      - ollama:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Downloads the models once, then exits.
+  llm-pull:
+    profiles: [gpu]
+    image: ollama/ollama:latest
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://llm:11434
+      HOUSE_AI_MODEL: ${HOUSE_AI_MODEL:-qwen2.5:14b}
+      HOUSE_COACH_MODEL: ${HOUSE_COACH_MODEL:-qwen2.5:14b}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull $${HOUSE_AI_MODEL} && ollama pull $${HOUSE_COACH_MODEL}"]
+    depends_on:
+      llm:
+        condition: service_healthy
+
+  voice:
+    profiles: [gpu]
+    image: ghcr.io/remsky/kokoro-fastapi-gpu:latest
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ears:
+    profiles: [gpu]
+    image: ghcr.io/speaches-ai/speaches:latest-cuda
+    restart: unless-stopped
+    environment:
+      PRELOAD_MODELS: '["Systran/faster-whisper-large-v3"]'
+      WHISPER__INFERENCE_DEVICE: cuda
+      WHISPER__COMPUTE_TYPE: float16
+    volumes:
+      - hf_cache:/home/ubuntu/.cache/huggingface/hub
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:
+  ollama:
+  hf_cache:
