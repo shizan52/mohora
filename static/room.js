@@ -6,6 +6,7 @@
 
 import { $, el, api, toast, fill, parseJSON, chat, activeConnection, connections, describe, openAIDialog, AIError } from './app.js';
 import { Avatar, personFor } from './avatar.js';
+import { runCode } from './code-runner.js';
 import * as voice from './voice.js';
 
 export const LEVELS = { intern: 'intern', fresher: 'fresh graduate', junior: 'junior', mid: 'mid-level', senior: 'senior', lead: 'lead or manager' };
@@ -103,7 +104,11 @@ function roomPage() {
   o.ask ||= o.input === 'voice' ? 'voice' : 'text';
   const voiceWanted = o.input === 'voice';
   const speaks = o.ask === 'voice' && voice.canSpeak;
-  let useVoice = voiceWanted && voice.canListen;
+  // In a coding round the answer is the code plus a typed explanation.
+  const coding = Boolean(pack.editor);
+  let useVoice = voiceWanted && voice.canListen && !coding;
+  let gaze = null;
+  let lastRun = '';
   const person = interviewerFor(run);
   const who = { name: person.name, role: pack.interviewer.role };
   const avatar = new Avatar($('#ai-avatar'), person.id, { mood: o.persona });
@@ -339,6 +344,7 @@ function roomPage() {
 
   function readyForAnswer() {
     setControls(true);
+    gaze?.count(true);
     if (useVoice) {
       setYou('Your turn');
       if (settings.auto_listen !== false) startListening();
@@ -388,8 +394,10 @@ function roomPage() {
 
   async function deliver(reply) {
     st.pending = null;
-    if (reply.intent === 'next') st.qi += 1;
-    else if (reply.intent === 'wrap_up') st.phase = 'wrap';
+    if (reply.intent === 'next') {
+      st.qi += 1;
+      if (coding) clearCode();
+    } else if (reply.intent === 'wrap_up') st.phase = 'wrap';
     else if (reply.intent === 'follow_up') st.blocks[st.qi].followups += 1;
     addTurn('ai', reply.say, { intent: reply.intent });
     updatePhase();
@@ -397,8 +405,9 @@ function roomPage() {
   }
 
   async function submitAnswer(text, metrics) {
-    text = text.trim().slice(0, 4000);
+    text = text.trim().slice(0, coding ? 9000 : 4000);
     if (!text) return toast('Say or type an answer first, or skip the question.');
+    gaze?.count(false);
     hideAnswerBox();
     $('#hint-box').hidden = true;
     caption('You', text);
@@ -427,6 +436,7 @@ function roomPage() {
   function startListening() {
     if (!useVoice || listener?.active) return;
     speaker.stop();
+    if (voice.useServerListening(o.lang, settings)) return startRecording();
     listener = new voice.Listener({
       lang: lang.stt,
       silenceMs: (settings.silence || 0) * 1000,
@@ -434,11 +444,7 @@ function roomPage() {
       onSilence: () => finishSpeaking(),
       onError: (code) => {
         if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(code)) {
-          toast("The microphone is blocked or missing, so you'll type instead. You can allow it from the address bar.", true);
-          useVoice = false;
-          stopListening();
-          setControls(true);
-          showAnswerBox('');
+          micDenied();
         } else if (code === 'network') {
           toast('Speech recognition lost its connection. Keep talking, or type instead.', true);
         }
@@ -450,18 +456,48 @@ function roomPage() {
     setYou('Listening', true);
   }
 
-  function stopListening() {
+  function micDenied() {
+    toast("The microphone is blocked or missing, so you'll type instead. You can allow it from the address bar.", true);
+    useVoice = false;
+    stopListening();
+    setControls(true);
+    showAnswerBox('');
+  }
+
+  function startRecording() {
+    listener = new voice.Recorder({ lang: o.lang, onError: micDenied });
+    listener.start();
+    $('#mic').classList.add('on');
+    $('#mic').textContent = 'Recording…';
+    setYou('Recording', true);
+    caption('You', '', 'Recording. Your words appear when you finish.');
+  }
+
+  // keep: whether what was said is wanted. A recording is only sent for transcription when it is.
+  function stopListening(keep = false) {
     $('#mic').classList.remove('on');
     $('#mic').textContent = 'Start speaking';
     setYou('');
     if (!listener?.active) return { text: '', ms: 0, firstAt: 0 };
-    return listener.stop();
+    return listener.stop(keep);
   }
 
-  function finishSpeaking() {
-    const heard = stopListening();
+  async function finishSpeaking() {
+    let heard;
+    try {
+      setControls(false);
+      const waiting = stopListening(true);
+      if (waiting instanceof Promise) setYou('Transcribing');
+      heard = await waiting;
+    } catch (err) {
+      toast(`${err.message} Type your answer instead.`, true);
+      heard = { text: '' };
+      showAnswerBox('');
+    }
+    setYou('');
+    setControls(true);
     if (!heard.text) {
-      toast("Nothing was heard. Press Start speaking and try again, or type instead.");
+      if ($('#answer-box').hidden) toast("Nothing was heard. Press Start speaking and try again, or type instead.");
       return;
     }
     const latency = heard.firstAt && lastSpokeAt ? round1((heard.firstAt - lastSpokeAt) / 1000) : null;
@@ -481,7 +517,7 @@ function roomPage() {
     box.hidden = false;
     area.value = text;
     setYou(useVoice ? 'Checking the transcript' : 'Typing');
-    $('#answer-info').textContent = info || (text ? '' : 'Write the answer you would say out loud.');
+    $('#answer-info').textContent = info || (text ? '' : coding ? 'Your code and its last output are sent with this.' : 'Write the answer you would say out loud.');
     area.focus();
   }
 
@@ -490,8 +526,22 @@ function roomPage() {
     $('#answer').value = '';
   }
 
+  // The interviewer and the coach read the code and its output as part of the answer.
+  function withCode(text) {
+    const code = $('#code').value.trim();
+    if (!coding || !code) return text;
+    const language = $('#code-lang').value;
+    return `${text.trim()}\n\nMy code (${language}):\n${code.slice(0, 5000)}\n\nOutput when I ran it:\n${lastRun || '(not run)'}`.trim();
+  }
+
+  function clearCode() {
+    $('#code').value = '';
+    $('#code-output').textContent = 'Output appears here.';
+    lastRun = '';
+  }
+
   function sendTyped() {
-    const text = $('#answer').value;
+    const text = withCode($('#answer').value);
     const metrics = reviewMetrics
       ? { ...reviewMetrics, ...voice.analyze(text, { lang: o.lang, ms: reviewMetrics.ms }) }
       : { ...voice.analyze(text, { lang: o.lang }), typed: true };
@@ -719,6 +769,7 @@ function roomPage() {
     }
     text.textContent = 'Writing the summary…';
     const delivery = deliverySummary();
+    delivery.camera = gaze?.stop() || null;
     const summary = await summarize(delivery);
     const scored = st.blocks.filter((b) => b.eval);
     const rubric = pack.rubric.map((r) => {
@@ -820,6 +871,8 @@ function roomPage() {
       $('#tile-you').prepend(video);
       $('#tile-you').classList.add('camera');
       $('#meter').classList.add('over');
+      // Eye-contact estimates are a bonus: if the model can't load, the call goes on without them.
+      import('./gaze.js').then(({ watchFace }) => watchFace(video)).then((watcher) => (gaze = watcher)).catch(() => {});
     } catch {
       toast("The camera isn't available, so this runs as a voice call.", true);
     }
@@ -879,8 +932,8 @@ function roomPage() {
   $('#answer').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) sendTyped();
   });
-  $('#type-toggle').addEventListener('click', () => {
-    const heard = stopListening();
+  $('#type-toggle').addEventListener('click', async () => {
+    const heard = await Promise.resolve(stopListening(true)).catch(() => ({ text: '' }));
     showAnswerBox(heard.text);
   });
   $('#repeat').addEventListener('click', () => {
@@ -960,6 +1013,27 @@ function roomPage() {
       e.preventDefault();
     }
   });
+
+  if (coding) {
+    $('.stage').classList.add('coding');
+    $('#code-panel').hidden = false;
+    $('#answer').placeholder = 'Explain your approach here. Your code and its output are sent with it.';
+    $('#code').addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      e.target.setRangeText('    ', e.target.selectionStart, e.target.selectionEnd, 'end');
+    });
+    $('#run').addEventListener('click', async () => {
+      const code = $('#code').value;
+      if (!code.trim()) return;
+      $('#run').disabled = true;
+      $('#run-status').textContent = $('#code-lang').value === 'python' ? 'Running (the first Python run loads the runtime)…' : 'Running…';
+      lastRun = await runCode($('#code-lang').value, code);
+      $('#code-output').textContent = lastRun;
+      $('#run-status').textContent = '';
+      $('#run').disabled = false;
+    });
+  }
 
   updatePhase();
   setControls(false);

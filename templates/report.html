@@ -61,6 +61,13 @@
         {% if d.wpm %}<div><b>{{ d.wpm }}</b><span class="small muted">words a minute (130 to 160 is easy to follow)</span></div>{% endif %}
         <div><b>{{ d.filler_rate }}</b><span class="small muted">filler words per 100{% if d.fillers %}: {% for k, n in d.fillers.items() %}{{ k }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}{% endif %}</span></div>
         {% if d.latency_s is not none and d.spoken %}<div><b>{{ d.latency_s }} s</b><span class="small muted">before you started answering</span></div>{% endif %}
+        {% if d.camera %}
+        <div><b>{{ d.camera.in_frame }}%</b><span class="small muted">of the time your face was in frame{% if d.camera.facing is none %}. Too little to judge eye contact: check your lighting and camera angle{% endif %}</span></div>
+        {% if d.camera.facing is not none %}
+        <div><b>{{ d.camera.facing }}%</b><span class="small muted">of the time you faced the screen (above 60% reads as engaged)</span></div>
+        <div><b>{{ d.camera.smiling }}%</b><span class="small muted">of the time you were smiling</span></div>
+        {% endif %}
+        {% endif %}
       </div>
     </div>
   </div>
@@ -98,7 +105,7 @@
           {% if t.who == 'ai' %}
             {% if not loop.first %}<p class="q-line">{{ r.interviewer.name }}: {{ t.text }}</p>{% endif %}
           {% else %}
-            <p>{{ t.text | mark_answer(b.eval.quotes if b.eval else [], r.delivery.terms) }}</p>
+            <p{% if 'My code (' in t.text %} class="code-answer"{% endif %}>{{ t.text | mark_answer(b.eval.quotes if b.eval else [], r.delivery.terms) }}</p>
           {% endif %}
         {% else %}
           <p class="muted">The transcript wasn't saved because transcript saving is turned off in your settings.</p>

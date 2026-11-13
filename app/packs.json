@@ -346,6 +346,46 @@
         {"id": "confidence", "label": "Confidence", "hint": "Steady: neither arrogant nor timid."}
       ],
       "rules": ["Address the candidate formally.", "If an answer is factually wrong, do not correct it. Ask one probing question and move on."]
+    },
+    {
+      "slug": "coding-round",
+      "title": "Coding round",
+      "summary": "Solve two small problems in an editor while you explain your thinking. Run your code as you go.",
+      "brief": "A live coding interview. The interviewer gives one small programming problem at a time and reads the candidate's code as they work. The candidate's messages include their current code and what it printed when run. Strong candidates restate the problem, explain an approach before coding, write working code, test it with edge cases, and can state the time and space complexity.",
+      "pro": false,
+      "minutes": 25,
+      "default_count": 2,
+      "followups": 2,
+      "editor": true,
+      "about": {"default": "software developer"},
+      "sections": [
+        {"c": "warm-up", "n": 1},
+        {"c": "core", "n": 1}
+      ],
+      "interviewer": {"name": "Tanvir Ahmed", "role": "Senior Engineer"},
+      "opener": "Write a function that returns the first character in a string that appears only once, or nothing if there isn't one. For example, in 'swiss' the answer is 'w'.",
+      "competencies": ["warm-up", "core"],
+      "bank": [
+        {"q": "Write a function that returns the first character in a string that appears only once, or nothing if there isn't one. For example, in 'swiss' the answer is 'w'.", "c": "warm-up", "d": 1},
+        {"q": "Write a function that checks whether a string of brackets is balanced. For example, '([]{})' is balanced and '([)]' is not.", "c": "warm-up", "d": 1},
+        {"q": "Write a function that takes a list of numbers and returns the two largest different values. For example, [4, 9, 9, 2] gives 9 and 4.", "c": "warm-up", "d": 1},
+        {"q": "Write a function that counts how many times each word appears in a sentence, ignoring upper and lower case.", "c": "warm-up", "d": 1},
+        {"q": "Write a function that tells whether two words are anagrams of each other, such as 'listen' and 'silent'.", "c": "warm-up", "d": 1},
+        {"q": "Given a list of numbers and a target, return the positions of two numbers that add up to the target. For example, [2, 7, 11, 15] with target 9 gives positions 0 and 1.", "c": "core", "d": 2},
+        {"q": "Given meeting times as start and end pairs, merge the ones that overlap. For example, [1,3], [2,6], [8,10] becomes [1,6], [8,10].", "c": "core", "d": 2},
+        {"q": "Write a function that returns the length of the longest stretch of a string with no repeated character. For example, 'abcabcbb' gives 3.", "c": "core", "d": 2},
+        {"q": "Given a list of daily prices, find the best profit from buying on one day and selling on a later day. For example, [7, 1, 5, 3, 6, 4] gives 5.", "c": "core", "d": 2},
+        {"q": "Write a function that groups words that are anagrams of each other. For example, eat, tea, tan, ate, nat, bat makes three groups.", "c": "core", "d": 2},
+        {"q": "Build a small cache that holds at most N items and drops the least recently used one when it is full.", "c": "core", "d": 3}
+      ],
+      "rubric": [
+        {"id": "correctness", "label": "Correctness", "hint": "The code solves the problem, including the example given."},
+        {"id": "approach", "label": "Approach", "hint": "Explains a plan before or while coding, and why it works."},
+        {"id": "complexity", "label": "Complexity", "hint": "Knows the time and space cost and can say how to improve it."},
+        {"id": "quality", "label": "Code quality", "hint": "Readable names, simple structure, no dead code."},
+        {"id": "testing", "label": "Testing", "hint": "Runs the code and tries edge cases such as empty input."}
+      ],
+      "rules": ["Never write code or give away the solution. If the candidate is stuck, give one small hint.", "When the solution works, use your follow-up to ask about time and space complexity or an edge case.", "Refer to the candidate's own code: name the line, variable or case you are asking about."]
     }
   ],
   "journey": [

@@ -509,7 +509,7 @@ function onPack() {
   const p = currentPack();
   if (!state.touched.has('count')) form.elements.count.value = p.default_count || 5;
   $('#jd-optional').textContent = p.needs_jd ? '(needed for Job description match)' : '(optional)';
-  if (!state.touched.has('talk') && p.ask === 'text' && p.input === 'text') form.elements.talk.value = 'text';
+  if (!state.touched.has('talk') && ((p.ask === 'text' && p.input === 'text') || p.editor)) form.elements.talk.value = 'text';
   const single = val('scope') === 'single';
   const about = single ? p.about : null;
   $('#subject-field').hidden = !about?.label;

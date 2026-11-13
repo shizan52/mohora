@@ -35,6 +35,19 @@
         <span class="tile-name">You</span>
       </div>
     </div>
+    <div class="code-panel" id="code-panel" hidden>
+      <div class="spread">
+        <div class="row">
+          <label class="sr-only" for="code-lang">Language</label>
+          <select id="code-lang"><option value="python">Python</option><option value="javascript">JavaScript</option></select>
+          <span class="small" id="run-status" role="status"></span>
+        </div>
+        <button class="btn btn-small" id="run" type="button">Run</button>
+      </div>
+      <label class="sr-only" for="code">Your code</label>
+      <textarea id="code" spellcheck="false" autocapitalize="off" placeholder="Write your solution here. Print a few test cases, then press Run."></textarea>
+      <pre id="code-output" aria-live="polite">Output appears here.</pre>
+    </div>
     <div class="stack">
       <p class="caption" id="caption" aria-live="polite"></p>
       <p class="hint-box" id="hint-box" hidden></p>

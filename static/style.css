@@ -649,3 +649,22 @@ label.chip:has(input:focus-visible) { outline: 3px solid var(--blue); outline-of
 .sheet .parts { margin-top: 0.9rem; }
 .story > .spread { margin-top: 1.2rem; }
 a.chip { text-decoration: none; }
+
+/* ---------- coding round ---------- */
+
+.stage.coding { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); grid-template-rows: auto 1fr; grid-template-areas: "tiles code" "talk code"; align-items: start; }
+.stage.coding .tiles { grid-area: tiles; grid-template-columns: 1fr; max-width: none; }
+.stage.coding .tile.you { display: none; }
+.stage.coding .tile { aspect-ratio: 16 / 7; }
+.stage.coding > .stack { grid-area: talk; }
+.stage.coding .caption { font-size: 1.05rem; text-align: left; min-height: 0; }
+.code-panel { grid-area: code; display: grid; grid-template-rows: auto 1fr auto; gap: 0.6rem; height: 100%; min-height: 26rem; }
+.code-panel select { width: auto; background: #0b1230; color: var(--stage-text); border-color: #36417e; box-shadow: none; padding: 0.4em 0.7em; }
+.code-panel textarea, .code-panel pre, .code-answer { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.88rem; line-height: 1.5; }
+.code-panel textarea { background: #0b1230; color: var(--stage-text); border-color: #36417e; box-shadow: none; resize: none; min-height: 16rem; white-space: pre; tab-size: 4; }
+.code-panel pre { margin: 0; background: #070c24; color: #c3c9ea; border-radius: 10px; padding: 0.7rem 0.9rem; max-height: 9rem; min-height: 3.2rem; overflow: auto; white-space: pre-wrap; }
+.code-answer { white-space: pre-wrap; background: var(--mist); border-radius: 10px; padding: 0.9rem 1rem; overflow-x: auto; }
+@media (max-width: 900px) {
+  .stage.coding { grid-template-columns: 1fr; grid-template-areas: "tiles" "code" "talk"; }
+  .stage.coding .tile { aspect-ratio: 16 / 6; }
+}

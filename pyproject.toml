@@ -10,7 +10,7 @@ line-length = 120
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI declares dependencies as default arguments.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Form", "fastapi.Query"]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Form", "fastapi.Query", "fastapi.File"]
 
 [tool.pyright]
 venvPath = "."
