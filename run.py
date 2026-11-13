@@ -74,7 +74,11 @@ def ask(question: str, default: str = "") -> str:
     if not sys.stdin.isatty():
         return default
     hint = f" [{default}]" if default else ""
-    answer = input(f"  {question}{hint}: ").strip()
+    try:
+        answer = input(f"  {question}{hint}: ").strip()
+    except EOFError:
+        # Run from a script or CI with no one to answer: take the defaults.
+        return default
     return answer or default
 
 
