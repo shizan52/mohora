@@ -5,6 +5,16 @@ import * as voice from './voice.js';
 
 const STORE = 'mohora.ai';
 
+// What the site's own AI offers (set by the server when it has a GPU behind it).
+export const HOUSE = (() => {
+  try {
+    return JSON.parse(document.querySelector('meta[name="house-ai"]')?.content || '{}');
+  } catch {
+    return {};
+  }
+})();
+const HOUSE_CONNECTION = { id: 'house', provider: 'house', label: 'Built-in AI', model: 'interviewer', coachModel: 'coach', key: '' };
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -77,6 +87,7 @@ export function parseJSON(text) {
 // ------------------------------------------------------------------ providers
 
 export const PROVIDERS = [
+  { id: 'house', group: 'house', name: 'Built-in AI', blurb: 'No key needed. Runs on this site’s own server.' },
   {
     id: 'openrouter', group: 'account', name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', relay: true,
     blurb: 'One sign-in for GPT, Claude, Gemini, Llama, DeepSeek and free models.',
@@ -132,7 +143,8 @@ export const PROVIDERS = [
 ];
 
 export const provider = (id) => PROVIDERS.find((p) => p.id === id) || PROVIDERS.find((p) => p.id === 'custom');
-export const describe = (conn) => `${conn.label || provider(conn.provider).name}${conn.model ? `, ${conn.model}` : ''}`;
+export const describe = (conn) =>
+  conn.provider === 'house' ? 'the built-in AI' : `${conn.label || provider(conn.provider).name}${conn.model ? `, ${conn.model}` : ''}`;
 
 function readStore(storage) {
   try {
@@ -145,11 +157,16 @@ function readStore(storage) {
 function loadState() {
   const kept = readStore(localStorage);
   const temp = readStore(sessionStorage);
-  return { connections: [...(kept.connections || []), ...(temp.connections || [])], active: temp.active || kept.active || null };
+  const own = [...(kept.connections || []), ...(temp.connections || [])];
+  // Listed last, so someone's own connection wins, and with none the built-in AI is simply there.
+  return { connections: HOUSE.chat ? [...own, HOUSE_CONNECTION] : own, active: temp.active || kept.active || null };
 }
 
 function saveState(state) {
-  const pick = (remember) => ({ connections: state.connections.filter((c) => !!c.remember === remember), active: state.active });
+  const pick = (remember) => ({
+    connections: state.connections.filter((c) => c.provider !== 'house' && !!c.remember === remember),
+    active: state.active,
+  });
   try {
     localStorage.setItem(STORE, JSON.stringify(pick(true)));
     sessionStorage.setItem(STORE, JSON.stringify(pick(false)));
@@ -288,6 +305,7 @@ async function completions(conn, body) {
 export async function chat(conn, messages, { json = false, model, maxTokens = 700, temperature = 0.7 } = {}) {
   model = model || conn.model;
   messages = mergeRoles(messages);
+  if (conn.provider === 'house') return houseChat(messages, { json, purpose: model === 'coach' ? 'coach' : 'interviewer', maxTokens, temperature });
   if (conn.provider === 'puter') return puterChat(messages, model);
   if (provider(conn.provider).api === 'anthropic') {
     const system = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
@@ -299,6 +317,26 @@ export async function chat(conn, messages, { json = false, model, maxTokens = 70
   const body = { model, messages, max_tokens: maxTokens, temperature };
   if (json && !conn.noJsonMode) body.response_format = { type: 'json_object' };
   const data = await completions(conn, body);
+  return data.choices?.[0]?.message?.content || '';
+}
+
+async function houseChat(messages, { json, purpose, maxTokens, temperature }) {
+  let res;
+  try {
+    res = await fetch('/api/house/chat', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+      body: JSON.stringify({ messages, purpose, json_mode: json, max_tokens: maxTokens, temperature }),
+    });
+  } catch {
+    throw new AIError("Couldn't reach this site. Check your internet connection.", 'network');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof data.detail === 'string' ? data.detail : data.error?.message;
+    throw new AIError(detail || 'The built-in AI had a problem. Try again.', res.status === 429 ? 'quota' : 'server', res.status);
+  }
   return data.choices?.[0]?.message?.content || '';
 }
 
@@ -436,7 +474,9 @@ export function mountConnections(root) {
         el('span', { class: 'sr-only' }, 'Use this one')),
       el('div', { class: 'grow' },
         el('b', {}, conn.label || provider(conn.provider).name),
-        el('div', { class: 'small muted' }, conn.model || 'provider default model', conn.remember ? '' : ', forgotten when you close the browser', conn.relay ? ', routed through this site' : ''),
+        el('div', { class: 'small muted' }, conn.provider === 'house'
+          ? 'No key needed. A daily allowance applies; your own AI has none.'
+          : [conn.model || 'provider default model', conn.remember ? '' : ', forgotten when you close the browser', conn.relay ? ', routed through this site' : '']),
         result),
       el('button', {
         class: 'btn btn-small', type: 'button',
@@ -453,8 +493,8 @@ export function mountConnections(root) {
           }
         },
       }, 'Test'),
-      el('button', { class: 'btn btn-small', type: 'button', onclick: () => { editing = { ...conn }; draw(); } }, 'Edit'),
-      el('button', { class: 'btn btn-small btn-quiet', type: 'button', onclick: () => { removeConnection(conn.id); draw(); } }, 'Remove'));
+      conn.provider === 'house' ? '' : el('button', { class: 'btn btn-small', type: 'button', onclick: () => { editing = { ...conn }; draw(); } }, 'Edit'),
+      conn.provider === 'house' ? '' : el('button', { class: 'btn btn-small btn-quiet', type: 'button', onclick: () => { removeConnection(conn.id); draw(); } }, 'Remove'));
   }
 
   function group(title, id) {
@@ -707,6 +747,7 @@ function settingsPage() {
   fillVoices();
   window.speechSynthesis?.addEventListener('voiceschanged', fillVoices);
   voiceForm.elements.engine.value = saved.engine;
+  if (voiceForm.elements.listen) voiceForm.elements.listen.value = saved.listen;
   voiceForm.elements.rate.value = saved.rate;
   voiceForm.elements.silence.value = saved.silence;
   voiceForm.elements.auto_listen.checked = saved.auto_listen !== false;
@@ -719,7 +760,7 @@ function settingsPage() {
   drawNatural();
   voiceForm.addEventListener('change', () => {
     const data = {
-      engine: voiceForm.elements.engine.value, voice_en: $('#voice-en').value, voice_bn: $('#voice-bn').value,
+      engine: voiceForm.elements.engine.value, listen: voiceForm.elements.listen?.value || 'auto', voice_en: $('#voice-en').value, voice_bn: $('#voice-bn').value,
       rate: Number(voiceForm.elements.rate.value), silence: Number(voiceForm.elements.silence.value),
       auto_listen: voiceForm.elements.auto_listen.checked,
     };

@@ -21,12 +21,23 @@
         <label for="engine">Interviewer voice</label>
         <select id="engine" name="engine">
           <option value="auto">Automatic: the most natural voice available</option>
+          {% if house.speech %}<option value="house">This site's natural voice</option>{% endif %}
           <option value="natural">Natural voice that runs in this browser (English)</option>
           <option value="openai">OpenAI voice, through your OpenAI key (any language)</option>
           <option value="browser">Browser voice</option>
         </select>
         <p class="hint">Edge has natural voices built in. In other browsers, download the natural voice below or use an OpenAI key.</p>
       </div>
+      {% if house.transcribe %}
+      <div class="field">
+        <label for="listen">How your answers are heard</label>
+        <select id="listen" name="listen">
+          <option value="auto">Automatic: live captions in English, this site's transcription for Bangla</option>
+          <option value="browser">Browser recognition, with live captions</option>
+          <option value="server">This site's transcription: more accurate, text appears when you finish</option>
+        </select>
+      </div>
+      {% endif %}
       <div class="panel panel-mist panel-tight">
         <div class="spread">
           <div><b>Natural voice</b> <span class="small muted">About 90 MB, downloaded once and kept by your browser.</span><div class="small" id="natural-status" role="status"></div></div>

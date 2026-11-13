@@ -5,7 +5,19 @@
 // and the browser's built-in voices, ranked so "Natural"/"Online" neural voices win.
 
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-export const canListen = Boolean(Recognition);
+const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content || '';
+const HOUSE = (() => {
+  try {
+    return JSON.parse(meta('house-ai') || '{}');
+  } catch {
+    return {};
+  }
+})();
+const serverListens = Boolean(HOUSE.transcribe) && 'MediaRecorder' in window;
+// Live captions need the browser's own recognition; the server's transcription works in any browser.
+export const liveCaptions = Boolean(Recognition);
+export const canListen = liveCaptions || serverListens;
+export const houseSpeaks = (lang) => (HOUSE.speech || []).includes(lang);
 export const canSpeak = 'speechSynthesis' in window;
 
 const FILLERS = {
@@ -28,7 +40,7 @@ export function analyze(text, { lang = 'en', ms = 0 } = {}) {
   return { words, fillers, fillerCount, ms, wpm: ms > 5000 && words > 8 ? Math.round(words / (ms / 60000)) : null };
 }
 
-const DEFAULTS = { engine: 'auto', rate: 1, silence: 0, auto_listen: true };
+const DEFAULTS = { engine: 'auto', listen: 'auto', rate: 1, silence: 0, auto_listen: true };
 
 export function voiceSettings() {
   try {
@@ -105,6 +117,67 @@ export class Listener {
     } catch {}
     return { text: this.text(), ms: this.firstAt ? Math.round(this.lastAt - this.firstAt) : 0, firstAt: this.firstAt };
   }
+}
+
+// Records the answer and has the site's server transcribe it when the person stops.
+// Same shape as Listener, except stop() resolves later and there are no live captions.
+export class Recorder {
+  constructor({ lang = 'en', onError } = {}) {
+    Object.assign(this, { lang, onError });
+    this.active = false;
+  }
+
+  async start() {
+    this.active = true;
+    this.chunks = [];
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch {
+      this.active = false;
+      return this.onError?.('not-allowed');
+    }
+    if (!this.active) return this.release();
+    this.rec = new MediaRecorder(this.stream, { audioBitsPerSecond: 24000 });
+    this.rec.ondataavailable = (e) => e.data.size && this.chunks.push(e.data);
+    this.startedAt = performance.now();
+    this.rec.start();
+  }
+
+  release() {
+    this.stream?.getTracks().forEach((t) => t.stop());
+  }
+
+  async stop(keep = false) {
+    const wasActive = this.active;
+    this.active = false;
+    const empty = { text: '', ms: 0, firstAt: 0 };
+    if (!wasActive || !this.rec) {
+      this.release();
+      return empty;
+    }
+    const ms = Math.round(performance.now() - this.startedAt);
+    await new Promise((resolve) => {
+      this.rec.onstop = resolve;
+      this.rec.stop();
+    });
+    this.release();
+    if (!keep || !this.chunks.length) return empty;
+    const form = new FormData();
+    form.append('audio', new Blob(this.chunks, { type: this.rec.mimeType || 'audio/webm' }), 'answer.webm');
+    form.append('lang', this.lang);
+    const res = await fetch('/api/house/transcribe', { method: 'POST', credentials: 'same-origin', headers: { 'X-CSRF-Token': meta('csrf') }, body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : "The recording couldn't be transcribed.");
+    return { text: data.text || '', ms, firstAt: 0 };
+  }
+}
+
+// Which way to listen: the browser gives live captions; the server is more accurate,
+// especially for Bangla, and works where the browser can't listen at all.
+export function useServerListening(lang, settings = voiceSettings()) {
+  if (!serverListens) return false;
+  if (!liveCaptions || settings.listen === 'server') return true;
+  return settings.listen !== 'browser' && lang !== 'en';
 }
 
 export async function micLevel(onLevel) {
@@ -245,6 +318,7 @@ export class Speaker {
     if (want === 'browser') return 'browser';
     if (want === 'natural' && english && naturalReady()) return 'natural';
     if (want === 'openai' && this.openaiKey) return 'openai';
+    if (['auto', 'house'].includes(want) && houseSpeaks(this.lang)) return 'house';
     if (want === 'auto') {
       // Edge ships neural "Natural" voices; when one exists it is instant and sounds human.
       if (hasNeuralVoice(this.lang)) return 'browser';
@@ -259,7 +333,7 @@ export class Speaker {
   }
 
   get label() {
-    return { natural: 'natural voice', openai: 'OpenAI voice', browser: 'browser voice' }[this.engine];
+    return { house: "this site's natural voice", natural: 'natural voice', openai: 'OpenAI voice', browser: 'browser voice' }[this.engine];
   }
 
   // Call from a click handler: browsers only allow audio to start after a user gesture.
@@ -319,6 +393,16 @@ export class Speaker {
       const buffer = this.ctx.createBuffer(1, audio.length, rate);
       buffer.copyToChannel(audio, 0);
       return buffer;
+    }
+    if (this.engine === 'house') {
+      const reply = await fetch('/api/house/speech', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': meta('csrf') },
+        body: JSON.stringify({ text, gender: this.gender }),
+      });
+      if (!reply.ok) throw new Error(`The site's voice failed (${reply.status}).`);
+      return this.ctx.decodeAudioData(await reply.arrayBuffer());
     }
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',

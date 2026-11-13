@@ -1,8 +1,8 @@
 // Between interviews: drills on weak answers, the goal, the story bank, and sharing a report.
 
 import { $, $$, el, api, toast, fill, parseJSON, chat, activeConnection, openAIDialog } from './app.js';
+import { canListen } from './voice.js';
 
-const canListen = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
 const STAR = ['situation', 'task', 'action', 'result'];
 
 function saved(key) {

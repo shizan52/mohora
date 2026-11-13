@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import admin, auth, billing, notify, practice
+from . import admin, auth, billing, house, notify, practice
 from .auth import LoginRequired, current_user, guest_token, require_user
 from .config import ROOT, config
 from .db import (
@@ -42,6 +42,8 @@ log = logging.getLogger("mohora")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    if config.secure_cookies and config.secret_key in ("", "change-me", "dev-only-secret"):
+        raise RuntimeError("Set SECRET_KEY in .env before serving a public site.")
     init_db()
     digest = asyncio.create_task(notify.digest_loop()) if config.telegram_enabled else None
     yield
@@ -55,6 +57,7 @@ app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(billing.router)
 app.include_router(practice.router)
+app.include_router(house.router)
 
 # Browser code calls AI providers directly, so connect-src has to allow any HTTPS
 # host (custom OpenAI-compatible URLs) and localhost (Ollama, LM Studio).
@@ -100,6 +103,9 @@ async def site_middleware(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "microphone=(self), camera=(self), geolocation=()"
+    if path.startswith("/static/") and "v" in request.query_params:
+        # Asset URLs carry a version, so browsers can keep them for good.
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     if path.startswith(ISOLATED_PATHS):
         # Cross-origin isolation lets the in-browser voice model use every CPU core, which
         # makes it several times faster. Only the interview room needs it; elsewhere it
@@ -169,7 +175,8 @@ def rate_limit(key: str, limit: int, per_seconds: float) -> None:
 
 
 def client_ip(request: Request) -> str:
-    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "")
+    # The reverse proxy passes the visitor's address on; uvicorn resolves it (--proxy-headers).
+    return request.client.host if request.client else ""
 
 
 def owned_session(request: Request, db: Session, sid: int, user: User | None) -> InterviewSession:

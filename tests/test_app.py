@@ -16,14 +16,21 @@ os.environ.update({
     "TELEGRAM_BOT_TOKEN": "",
     "TELEGRAM_ADMIN_CHAT_ID": "",
     "ADMIN_EMAILS": "owner@example.com",
+    "HOUSE_AI_URL": "http://house.test/v1",
+    "HOUSE_AI_MODEL": "talk-model",
+    "HOUSE_COACH_MODEL": "coach-model",
+    "HOUSE_DAILY_LIMIT": "6",
+    "HOUSE_TTS_URL": "http://voice.test/v1",
+    "HOUSE_STT_URL": "http://ears.test/v1",
 })
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app import billing, notify, practice
+from app import billing, house, notify, practice
 from app.admin import validate_pack
-from app.db import InterviewSession, Payment, ReviewItem, SessionLocal, Story, User, set_setting
+from app.db import InterviewSession, Pack, Payment, ReviewItem, SessionLocal, Story, User, set_setting
 from app.main import app
 from app.web import mark_answer
 
@@ -355,3 +362,51 @@ def test_plan_calendar_download(client):
     sign_in(client, "planner@example.com")
     res = client.get("/app/plan.ics")
     assert res.headers["content-type"].startswith("text/calendar") and "BEGIN:VEVENT" in res.text
+
+
+@pytest.fixture()
+def gpu(monkeypatch):
+    """Stands in for the model, voice and transcription servers behind the built-in AI."""
+    calls = []
+
+    async def upstream(url, **kwargs):
+        calls.append((url, kwargs))
+        if url.endswith("/chat/completions"):
+            return httpx.Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+        if url.endswith("/audio/speech"):
+            return httpx.Response(200, content=b"ID3 fake audio", headers={"content-type": "audio/mpeg"})
+        return httpx.Response(200, json={"text": " hello there "})
+
+    monkeypatch.setattr(house, "upstream", upstream)
+    house._used.clear()
+    return calls
+
+
+def test_built_in_ai_needs_no_key_and_has_a_daily_allowance(client, gpu):
+    assert '"chat": true' in client.get("/").text
+    headers = {"X-CSRF-Token": sign_in(client, "nokey@example.com")}
+    body = {"messages": [{"role": "user", "content": "hi"}], "purpose": "coach", "json_mode": True}
+    assert client.post("/api/house/chat", json=body).status_code == 403
+    res = client.post("/api/house/chat", json=body, headers=headers)
+    assert res.json()["choices"][0]["message"]["content"] == "OK"
+    url, sent = gpu[0]
+    assert url == "http://house.test/v1/chat/completions"
+    assert sent["json"]["model"] == "coach-model" and sent["json"]["response_format"] == {"type": "json_object"}
+    for _ in range(5):
+        assert client.post("/api/house/chat", json=body, headers=headers).status_code == 200
+    assert client.post("/api/house/chat", json=body, headers=headers).status_code == 429
+
+
+def test_built_in_voice_and_transcription(client, gpu):
+    headers = {"X-CSRF-Token": sign_in(client, "talker@example.com")}
+    spoken = client.post("/api/house/speech", json={"text": "Hello.", "gender": "male"}, headers=headers)
+    assert spoken.content == b"ID3 fake audio" and gpu[-1][1]["json"]["voice"] == "am_michael"
+    heard = client.post("/api/house/transcribe", data={"lang": "bn"},
+                        files={"audio": ("answer.webm", b"1234", "audio/webm")}, headers=headers)
+    assert heard.json() == {"text": "hello there"} and gpu[-1][1]["data"]["language"] == "bn"
+
+
+def test_coding_round_is_seeded():
+    with SessionLocal() as db:
+        pack = db.get(Pack, "coding-round")
+        assert pack.data["editor"] and not pack.pro and len(pack.data["bank"]) >= 10

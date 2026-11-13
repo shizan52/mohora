@@ -11,7 +11,7 @@
         <a class="btn btn-big" href="/sample">See a sample report</a>
       </div>
       <ul class="facts">
-        <li>{{ icon('check') }} Free with your own AI</li>
+        <li>{{ icon('check') }} {{ 'No API key needed' if house.chat else 'Free with your own AI' }}</li>
         <li>{{ icon('check') }} Text, voice or video</li>
         <li>{{ icon('check') }} Questions from your CV</li>
         <li>{{ icon('check') }} English and Bangla</li>
@@ -183,7 +183,7 @@
       <div class="plan-card">
         <h3>Free</h3>
         <div class="price">0 <small>forever</small></div>
-        <ul><li>Unlimited job interviews of seven types</li><li>Questions from your CV and job post</li><li>Text, voice and video modes</li><li>Marked-up feedback, drills and a prep plan</li></ul>
+        <ul><li>Unlimited job interviews of eight types, coding round included</li><li>Questions from your CV and job post</li><li>Text, voice and video modes</li><li>Marked-up feedback, drills and a prep plan</li></ul>
         <a class="btn btn-block" href="/app/new">Start practising</a>
       </div>
       <div class="plan-card featured">
@@ -200,7 +200,7 @@
   <div class="narrow faq">
     <h2>Questions</h2>
     <details><summary>Is it really free?</summary><p>Yes. Interviews run on your own AI account, so practising costs this site almost nothing. A free key from Google Gemini or Groq is enough for daily practice.</p></details>
-    <details><summary>Do I need an API key?</summary><p>No. You can sign in with an OpenRouter or Puter account instead, or run a model on your own computer with Ollama.</p></details>
+    <details><summary>Do I need an API key?</summary><p>{% if house.chat %}No. The built-in AI works straight away, with a daily allowance. For unlimited practice, connect your own: sign in with an OpenRouter or Puter account, paste a free Gemini or Groq key, or run a model on your computer with Ollama.{% else %}No. You can sign in with an OpenRouter or Puter account instead, or run a model on your own computer with Ollama.{% endif %}</p></details>
     <details><summary>Can I do it with my camera on?</summary><p>Yes. Video call mode shows your camera next to the interviewer, like a real call. The video never leaves your device.</p></details>
     <details><summary>Does it work in Bangla?</summary><p>Yes. Choose Bangla, or Bangla mixed with English, when you set up the interview. Spoken Bangla works best in Chrome and Edge.</p></details>
     <details><summary>Where does my CV go?</summary><p>It's read in your browser and sent only to the AI provider you picked, as part of the prompt. It is never uploaded to this site.</p></details>

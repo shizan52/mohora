@@ -88,5 +88,5 @@ def mark_answer(text: str, quotes: list[dict] | None = None, fillers: list[str] 
     return Markup("").join(out)
 
 
-templates.env.globals.update(app_name=config.app_name, v=_asset_version(), site=cached_flags)
+templates.env.globals.update(app_name=config.app_name, v=_asset_version(), site=cached_flags, house=config.house)
 templates.env.filters.update(ago=ago, short_date=short_date, mark_answer=mark_answer)

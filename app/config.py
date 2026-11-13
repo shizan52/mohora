@@ -31,6 +31,31 @@ class Config:
     telegram_webhook_secret: str
     db_path: Path
     tz: str
+    house_ai_url: str
+    house_ai_key: str
+    house_ai_model: str
+    house_coach_model: str
+    house_daily_limit: int
+    house_tts_url: str
+    house_tts_model: str
+    house_tts_voice_female: str
+    house_tts_voice_male: str
+    house_tts_langs: tuple[str, ...]
+    house_stt_url: str
+    house_stt_model: str
+
+    @property
+    def house_enabled(self) -> bool:
+        return bool(self.house_ai_url and self.house_ai_model)
+
+    @property
+    def house(self) -> dict:
+        """What the site's own AI offers, as the browser needs to know it."""
+        return {
+            "chat": self.house_enabled,
+            "speech": list(self.house_tts_langs) if self.house_tts_url else [],
+            "transcribe": bool(self.house_stt_url),
+        }
 
     @property
     def google_enabled(self) -> bool:
@@ -70,6 +95,18 @@ def load() -> Config:
         telegram_webhook_secret=env("TELEGRAM_WEBHOOK_SECRET", ""),
         db_path=db_path,
         tz=env("TZ", "Asia/Dhaka"),
+        house_ai_url=env("HOUSE_AI_URL", "").rstrip("/"),
+        house_ai_key=env("HOUSE_AI_KEY", ""),
+        house_ai_model=env("HOUSE_AI_MODEL", ""),
+        house_coach_model=env("HOUSE_COACH_MODEL", "") or env("HOUSE_AI_MODEL", ""),
+        house_daily_limit=int(env("HOUSE_DAILY_LIMIT", "150")),
+        house_tts_url=env("HOUSE_TTS_URL", "").rstrip("/"),
+        house_tts_model=env("HOUSE_TTS_MODEL", "kokoro"),
+        house_tts_voice_female=env("HOUSE_TTS_VOICE_FEMALE", "af_heart"),
+        house_tts_voice_male=env("HOUSE_TTS_VOICE_MALE", "am_michael"),
+        house_tts_langs=tuple(x.strip() for x in env("HOUSE_TTS_LANGS", "en").split(",") if x.strip()),
+        house_stt_url=env("HOUSE_STT_URL", "").rstrip("/"),
+        house_stt_model=env("HOUSE_STT_MODEL", "Systran/faster-whisper-large-v3"),
     )
 
 
